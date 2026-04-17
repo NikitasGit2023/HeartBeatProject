@@ -1,3 +1,6 @@
+using HeartBeatProject.server.Configuration;
+using Microsoft.Extensions.Options;
+
 namespace HeartBeatProject.server.Services;
 
 public interface IHeartbeatFileGenerator
@@ -8,26 +11,22 @@ public interface IHeartbeatFileGenerator
 public sealed class HeartbeatFileGenerator : IHeartbeatFileGenerator
 {
     private readonly ILogger<HeartbeatFileGenerator> _logger;
-    private readonly string _folderPath;
-    private readonly string _prefix;
-    private readonly bool _overwrite;
+    private readonly HeartbeatOptions _options;
 
-    public HeartbeatFileGenerator(IConfiguration config, ILogger<HeartbeatFileGenerator> logger)
+    public HeartbeatFileGenerator(IOptions<HeartbeatOptions> options, ILogger<HeartbeatFileGenerator> logger)
     {
-        _logger     = logger;
-        _folderPath = config["Heartbeat:FolderPath"] ?? "C:\\Heartbeat";
-        _prefix     = config["Heartbeat:FileNamePrefix"] ?? "heartbeat";
-        _overwrite  = config.GetValue<bool>("Heartbeat:OverwriteExisting", true);
+        _logger  = logger;
+        _options = options.Value;
     }
 
     public async Task GenerateAsync(CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(_folderPath);
+        Directory.CreateDirectory(_options.FolderPath);
 
-        var fileName = $"{_prefix}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-        var filePath = Path.Combine(_folderPath, fileName);
+        var fileName = $"{_options.FileNamePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+        var filePath = Path.Combine(_options.FolderPath, fileName);
 
-        if (!_overwrite && File.Exists(filePath))
+        if (!_options.OverwriteExisting && File.Exists(filePath))
         {
             _logger.LogInformation("[{Time}] Heartbeat skipped — file already exists: {File}",
                 DateTime.Now, fileName);

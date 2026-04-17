@@ -1,4 +1,6 @@
+using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Services.Alerts;
+using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services;
 
@@ -7,11 +9,10 @@ public sealed class HeartbeatTxService : BackgroundService
     private readonly ILogger<HeartbeatTxService> _logger;
     private readonly IHeartbeatFileGenerator _fileGenerator;
     private readonly IAlertService _alertService;
-    private readonly TimeSpan _interval;
-    private readonly bool _enabled;
+    private readonly HeartbeatOptions _options;
 
     public HeartbeatTxService(
-        IConfiguration config,
+        IOptions<HeartbeatOptions> options,
         ILogger<HeartbeatTxService> logger,
         IHeartbeatFileGenerator fileGenerator,
         IAlertService alertService)
@@ -19,19 +20,18 @@ public sealed class HeartbeatTxService : BackgroundService
         _logger        = logger;
         _fileGenerator = fileGenerator;
         _alertService  = alertService;
-        _enabled       = config["Heartbeat:Mode"] == "TX";
-        _interval      = TimeSpan.FromSeconds(config.GetValue<int>("Heartbeat:IntervalSeconds", 30));
+        _options       = options.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_enabled)
+        if (_options.Mode != "TX")
         {
             _logger.LogInformation("HeartbeatTxService is disabled (Mode != TX).");
             return;
         }
 
-        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _interval.TotalSeconds);
+        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _options.IntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -49,7 +49,7 @@ public sealed class HeartbeatTxService : BackgroundService
                     cancellationToken: stoppingToken);
             }
 
-            await Task.Delay(_interval, stoppingToken);
+            await Task.Delay(TimeSpan.FromSeconds(_options.IntervalSeconds), stoppingToken);
         }
     }
 }

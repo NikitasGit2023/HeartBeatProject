@@ -1,34 +1,28 @@
 using System.Net.Mail;
+using HeartBeatProject.server.Configuration;
+using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services.Alerts;
 
 public sealed class SmtpAlertService : IAlertService
 {
     private readonly ILogger<SmtpAlertService> _logger;
-    private readonly bool _enabled;
-    private readonly string _smtpServer;
-    private readonly int _port;
-    private readonly string _from;
-    private readonly string _to;
+    private readonly AlertOptions _options;
 
-    public SmtpAlertService(IConfiguration config, ILogger<SmtpAlertService> logger)
+    public SmtpAlertService(IOptions<AlertOptions> options, ILogger<SmtpAlertService> logger)
     {
-        _logger     = logger;
-        _enabled    = config.GetValue<bool>("Alerts:EnableEmail");
-        _smtpServer = config["Alerts:SmtpServer"] ?? string.Empty;
-        _port       = config.GetValue<int>("Alerts:Port", 25);
-        _from       = config["Alerts:From"] ?? string.Empty;
-        _to         = config["Alerts:To"] ?? string.Empty;
+        _logger  = logger;
+        _options = options.Value;
     }
 
     public async Task SendAlertAsync(string subject, string message, CancellationToken cancellationToken = default)
     {
-        if (!_enabled) return;
+        if (!_options.EnableEmail) return;
 
         try
         {
-            using var client = new SmtpClient(_smtpServer, _port);
-            using var mail   = new MailMessage(_from, _to, subject, message);
+            using var client = new SmtpClient(_options.SmtpServer, _options.Port);
+            using var mail   = new MailMessage(_options.From, _options.To, subject, message);
 
             await client.SendMailAsync(mail, cancellationToken);
 
