@@ -2,33 +2,122 @@
 @implements IDisposable
 @inject HttpClient Http
 
-<PageTitle>Logs</PageTitle>
-<h2>Logs</h2>
+<PageTitle>Logs — HeartBeat</PageTitle>
 
-<table class="hb-logs">
-    <thead>
-        <tr>
-            <th>Time</th>
-            <th>Level</th>
-            <th>Message</th>
-        </tr>
-    </thead>
-    <tbody>
-        @foreach (var entry in _logs)
-        {
-            <tr style="color:@LevelColor(entry.Level)">
-                <td>@entry.Timestamp.ToString("HH:mm:ss")</td>
-                <td>@entry.Level</td>
-                <td>@entry.Message</td>
-            </tr>
-        }
-    </tbody>
-</table>
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Logs</h1>
+        <span class="page-subtitle">Live system log stream</span>
+    </div>
+    <div class="header-actions">
+        <span class="live-badge">
+            <span class="live-dot"></span> LIVE
+        </span>
+        <span class="log-count">@_logs.Count entries</span>
+    </div>
+</div>
+
+<div class="logs-card">
+    @if (_logs.Count == 0)
+    {
+        <div class="empty-state">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+            </svg>
+            <span>No logs yet</span>
+        </div>
+    }
+    else
+    {
+        <table class="logs-table">
+            <thead>
+                <tr>
+                    <th style="width:90px">Time</th>
+                    <th style="width:95px">Level</th>
+                    <th>Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var entry in _logs)
+                {
+                    <tr class="log-row">
+                        <td class="log-time">@entry.Timestamp.ToString("HH:mm:ss")</td>
+                        <td><span class="level-badge level-@entry.Level.ToLower()">@entry.Level</span></td>
+                        <td class="log-msg">@entry.Message</td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
 
 <style>
-    .hb-logs { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
-    .hb-logs th, .hb-logs td { padding: 5px 12px; border-bottom: 1px solid #eee; text-align: left; }
-    .hb-logs th { background: #f5f5f5; font-weight: 600; }
+    .page-header   { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem; }
+    .page-title    { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .page-subtitle { font-size: 0.875rem; color: #64748b; }
+
+    .header-actions { display: flex; align-items: center; gap: 12px; }
+
+    .live-badge {
+        display: flex; align-items: center; gap: 6px;
+        padding: 4px 10px; background: rgba(34,197,94,0.1);
+        border: 1px solid rgba(34,197,94,0.25);
+        border-radius: 99px; font-size: 0.7rem; font-weight: 700;
+        color: #16a34a; letter-spacing: 1px;
+    }
+    .live-dot { width: 7px; height: 7px; background: #22c55e; border-radius: 50%; animation: pulse-live 1.5s infinite; }
+
+    .log-count { font-size: 0.8rem; color: #94a3b8; }
+
+    .logs-card {
+        background: white;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.03);
+        border: 1px solid #f1f5f9;
+        overflow: hidden;
+    }
+
+    .empty-state {
+        display: flex; flex-direction: column; align-items: center; justify-content: center;
+        padding: 3rem; gap: 12px; color: #94a3b8;
+    }
+    .empty-state svg { width: 40px; height: 40px; opacity: 0.4; }
+
+    .logs-table { width: 100%; border-collapse: collapse; font-size: 0.84rem; }
+
+    .logs-table thead th {
+        padding: 10px 16px;
+        background: #f8fafc;
+        font-size: 0.7rem; font-weight: 700;
+        text-transform: uppercase; letter-spacing: 0.7px;
+        color: #94a3b8;
+        border-bottom: 1px solid #f1f5f9;
+        text-align: left;
+    }
+
+    .log-row { border-bottom: 1px solid #f8fafc; transition: background 0.1s; }
+    .log-row:hover { background: #f8fafc; }
+    .log-row:last-child { border-bottom: none; }
+
+    .log-time { padding: 9px 16px; color: #94a3b8; font-family: 'Courier New', monospace; font-size: 0.8rem; white-space: nowrap; }
+    .log-msg  { padding: 9px 16px; color: #334155; word-break: break-word; }
+
+    td { padding: 9px 16px; vertical-align: middle; }
+
+    .level-badge {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.68rem;
+        font-weight: 700;
+        letter-spacing: 0.5px;
+        text-transform: uppercase;
+    }
+    .level-information { background: #eff6ff; color: #2563eb; }
+    .level-warning     { background: #fffbeb; color: #d97706; }
+    .level-error       { background: #fef2f2; color: #dc2626; }
+    .level-critical    { background: #dc2626; color: white; }
 </style>
 
 @code {
@@ -60,13 +149,6 @@
         }
         catch { }
     }
-
-    private static string LevelColor(string level) => level switch
-    {
-        "Error"    => "#dc3545",
-        "Warning"  => "#e6a817",
-        _          => "inherit"
-    };
 
     public void Dispose() => _cts.Cancel();
 }

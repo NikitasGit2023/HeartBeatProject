@@ -2,46 +2,128 @@
 @implements IDisposable
 @inject HttpClient Http
 
-<PageTitle>Dashboard</PageTitle>
-<h2>Heartbeat Dashboard</h2>
+<PageTitle>Dashboard — HeartBeat</PageTitle>
+
+<div class="page-header">
+    <h1 class="page-title">Dashboard</h1>
+    <span class="page-subtitle">Real-time heartbeat monitoring</span>
+</div>
 
 @if (_status is null)
 {
-    <p>Loading...</p>
+    <div class="loading-card">
+        <div class="spinner"></div>
+        <span>Connecting...</span>
+    </div>
 }
 else
 {
-    <table class="hb-table">
-        <tr>
-            <td><strong>Mode</strong></td>
-            <td>@_status.Mode</td>
-        </tr>
-        <tr>
-            <td><strong>Status</strong></td>
-            <td>
-                <span class="hb-badge" style="background:@(_status.Status == "HEALTHY" ? "#28a745" : "#dc3545")">
-                    @_status.Status
-                </span>
-            </td>
-        </tr>
-        <tr>
-            <td><strong>Last Heartbeat</strong></td>
-            <td>@(_status.LastHeartbeat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td>
-        </tr>
-        <tr>
-            <td><strong>Uptime</strong></td>
-            <td>@FormatUptime(_status.Uptime)</td>
-        </tr>
-        <tr>
-            <td><strong>Next action in</strong></td>
-            <td>@_countdown s</td>
-        </tr>
-    </table>
+    <div class="stat-grid">
+
+        <div class="stat-card status-card @(_status.Status == "HEALTHY" ? "healthy" : "down")">
+            <div class="stat-label">System Status</div>
+            <div class="stat-value status-value">
+                <span class="status-dot @(_status.Status == "HEALTHY" ? "dot-healthy" : "dot-down")"></span>
+                @_status.Status
+            </div>
+            <div class="stat-sub">@(_status.Status == "HEALTHY" ? "All systems operational" : "Signal lost")</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Mode</div>
+            <div class="stat-value">@_status.Mode</div>
+            <div class="stat-sub">@(_status.Mode == "TX" ? "Transmitting" : "Receiving")</div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-label">Uptime</div>
+            <div class="stat-value mono">@FormatUptime(_status.Uptime)</div>
+            <div class="stat-sub">Since last restart</div>
+        </div>
+
+    </div>
+
+    <div class="detail-grid">
+
+        <div class="stat-card">
+            <div class="stat-label">Last Heartbeat</div>
+            @if (_status.LastHeartbeat.HasValue)
+            {
+                <div class="stat-value mono">@_status.LastHeartbeat.Value.ToString("HH:mm:ss")</div>
+                <div class="stat-sub">@_status.LastHeartbeat.Value.ToString("yyyy-MM-dd")</div>
+            }
+            else
+            {
+                <div class="stat-value muted">No signal yet</div>
+                <div class="stat-sub">—</div>
+            }
+        </div>
+
+        <div class="stat-card countdown-card">
+            <div class="stat-label">Next Action In</div>
+            <div class="countdown-number @(_countdown <= 10 ? "countdown-urgent" : "")">@_countdown<span class="countdown-unit">s</span></div>
+            <div class="progress-bar-track">
+                <div class="progress-bar-fill @(_countdown <= 10 ? "fill-urgent" : "")"
+                     style="width: @(Math.Min(100, (double)_countdown / Math.Max(1, _status.IntervalSeconds) * 100))%">
+                </div>
+            </div>
+            <div class="stat-sub">Interval: @_status.IntervalSeconds s</div>
+        </div>
+
+    </div>
 }
 
 <style>
-    .hb-table td { padding: 6px 16px 6px 0; vertical-align: middle; }
-    .hb-badge { color: white; padding: 3px 10px; border-radius: 4px; font-weight: bold; }
+    .page-header { margin-bottom: 1.75rem; }
+    .page-title  { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .page-subtitle { font-size: 0.875rem; color: #64748b; }
+
+    .loading-card { display: flex; align-items: center; gap: 12px; padding: 2rem; background: white; border-radius: 12px; color: #64748b; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
+    .spinner { width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.7s linear infinite; }
+
+    .stat-grid   { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+
+    .stat-card {
+        background: #ffffff;
+        border-radius: 12px;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.03);
+        border: 1px solid #f1f5f9;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+
+    .stat-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: #94a3b8; }
+    .stat-value { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 4px 0; }
+    .stat-sub   { font-size: 0.8rem; color: #94a3b8; }
+    .mono       { font-family: 'Courier New', monospace; }
+    .muted      { color: #94a3b8; }
+
+    .status-card.healthy { border-left: 4px solid #22c55e; }
+    .status-card.down    { border-left: 4px solid #ef4444; }
+
+    .status-value { display: flex; align-items: center; }
+    .status-dot {
+        width: 10px; height: 10px; border-radius: 50%;
+        margin-right: 10px; flex-shrink: 0;
+    }
+    .dot-healthy { background: #22c55e; animation: pulse-green 2s infinite; }
+    .dot-down    { background: #ef4444; animation: pulse-red   2s infinite; }
+
+    .countdown-card { gap: 8px; }
+    .countdown-number { font-size: 2.8rem; font-weight: 800; color: #0f172a; line-height: 1; font-family: 'Courier New', monospace; }
+    .countdown-unit   { font-size: 1.2rem; font-weight: 500; color: #94a3b8; margin-left: 3px; }
+    .countdown-urgent { color: #ef4444; }
+
+    .progress-bar-track { height: 6px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
+    .progress-bar-fill  { height: 100%; background: #0ea5e9; border-radius: 99px; transition: width 0.5s ease; }
+    .fill-urgent        { background: #ef4444; }
+
+    @@media (max-width: 640px) {
+        .detail-grid { grid-template-columns: 1fr; }
+    }
 </style>
 
 @code {

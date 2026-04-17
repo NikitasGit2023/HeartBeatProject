@@ -101,3 +101,26 @@ a, .btn-link {
 code {
     color: #c02d76;
 }
+
+/* ── Shared animations (can't use @keyframes inside Razor components) ── */
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-green {
+    0%   { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0.45); }
+    70%  { box-shadow: 0 0 0 8px rgba(34, 197, 94, 0);    }
+    100% { box-shadow: 0 0 0 0   rgba(34, 197, 94, 0);    }
+}
+
+@keyframes pulse-red {
+    0%   { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0.45); }
+    70%  { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0);    }
+    100% { box-shadow: 0 0 0 0   rgba(239, 68, 68, 0);    }
+}
+
+@keyframes pulse-live {
+    0%, 100% { opacity: 1;   }
+    50%       { opacity: 0.3; }
+}
