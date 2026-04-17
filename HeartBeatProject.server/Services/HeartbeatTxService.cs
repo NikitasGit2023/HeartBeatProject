@@ -25,12 +25,6 @@ public sealed class HeartbeatTxService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_options.Mode != "TX")
-        {
-            _logger.LogInformation("HeartbeatTxService is disabled (Mode != TX).");
-            return;
-        }
-
         _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _options.IntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)

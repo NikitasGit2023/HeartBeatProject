@@ -1,0 +1,87 @@
+@page "/settings"
+@inject HttpClient Http
+
+<PageTitle>Settings</PageTitle>
+<h2>Settings</h2>
+
+@if (_settings is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <EditForm Model="_settings" OnValidSubmit="SaveAsync">
+        <DataAnnotationsValidator />
+
+        <h4>Heartbeat</h4>
+        <div class="hb-field">
+            <label>Folder Path</label>
+            <InputText @bind-Value="_settings.FolderPath" />
+        </div>
+        <div class="hb-field">
+            <label>TX Interval (s)</label>
+            <InputNumber @bind-Value="_settings.IntervalSeconds" />
+        </div>
+        <div class="hb-field">
+            <label>RX Check Interval (s)</label>
+            <InputNumber @bind-Value="_settings.CheckIntervalSeconds" />
+        </div>
+        <div class="hb-field">
+            <label>RX Threshold (s)</label>
+            <InputNumber @bind-Value="_settings.ThresholdSeconds" />
+        </div>
+
+        <h4>Alerts (SMTP)</h4>
+        <div class="hb-field">
+            <label>Enable Email</label>
+            <InputCheckbox @bind-Value="_settings.EnableEmail" />
+        </div>
+        <div class="hb-field">
+            <label>SMTP Server</label>
+            <InputText @bind-Value="_settings.SmtpServer" />
+        </div>
+        <div class="hb-field">
+            <label>Port</label>
+            <InputNumber @bind-Value="_settings.Port" />
+        </div>
+        <div class="hb-field">
+            <label>From</label>
+            <InputText @bind-Value="_settings.From" />
+        </div>
+        <div class="hb-field">
+            <label>To</label>
+            <InputText @bind-Value="_settings.To" />
+        </div>
+
+        <button type="submit" class="btn btn-primary mt-2">Save</button>
+        @if (_saved)
+        {
+            <span style="color:green; margin-left:12px;">&#10003; Saved</span>
+        }
+    </EditForm>
+}
+
+<style>
+    .hb-field { display: flex; flex-direction: column; margin-bottom: 10px; max-width: 400px; }
+    .hb-field label { font-weight: 500; margin-bottom: 2px; }
+    .hb-field input { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; }
+</style>
+
+@code {
+    private SettingsDto? _settings;
+    private bool _saved;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await Http.GetFromJsonAsync<SettingsDto>("api/settings");
+    }
+
+    private async Task SaveAsync()
+    {
+        await Http.PostAsJsonAsync("api/settings", _settings);
+        _saved = true;
+        await Task.Delay(2500);
+        _saved = false;
+        StateHasChanged();
+    }
+}

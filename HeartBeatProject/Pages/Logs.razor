@@ -1,0 +1,72 @@
+@page "/logs"
+@implements IDisposable
+@inject HttpClient Http
+
+<PageTitle>Logs</PageTitle>
+<h2>Logs</h2>
+
+<table class="hb-logs">
+    <thead>
+        <tr>
+            <th>Time</th>
+            <th>Level</th>
+            <th>Message</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var entry in _logs)
+        {
+            <tr style="color:@LevelColor(entry.Level)">
+                <td>@entry.Timestamp.ToString("HH:mm:ss")</td>
+                <td>@entry.Level</td>
+                <td>@entry.Message</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<style>
+    .hb-logs { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .hb-logs th, .hb-logs td { padding: 5px 12px; border-bottom: 1px solid #eee; text-align: left; }
+    .hb-logs th { background: #f5f5f5; font-weight: 600; }
+</style>
+
+@code {
+    private List<LogEntryDto> _logs = new();
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _ = PollLoopAsync(_cts.Token);
+    }
+
+    private async Task PollLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(2000, ct).ConfigureAwait(false);
+            await RefreshAsync();
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<LogEntryDto>>("api/logs");
+            if (result is not null) _logs = result;
+        }
+        catch { }
+    }
+
+    private static string LevelColor(string level) => level switch
+    {
+        "Error"    => "#dc3545",
+        "Warning"  => "#e6a817",
+        _          => "inherit"
+    };
+
+    public void Dispose() => _cts.Cancel();
+}

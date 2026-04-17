@@ -23,12 +23,6 @@ public sealed class HeartbeatRxService : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (_options.Mode != "RX")
-        {
-            _logger.LogInformation("HeartbeatRxService is disabled (Mode != RX).");
-            return;
-        }
-
         _logger.LogInformation("HeartbeatRxService started. Folder: {Folder}, Threshold: {Threshold}s",
             _options.FolderPath, _options.ThresholdSeconds);
 

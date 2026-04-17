@@ -1,0 +1,96 @@
+@page "/dashboard"
+@implements IDisposable
+@inject HttpClient Http
+
+<PageTitle>Dashboard</PageTitle>
+<h2>Heartbeat Dashboard</h2>
+
+@if (_status is null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <table class="hb-table">
+        <tr>
+            <td><strong>Mode</strong></td>
+            <td>@_status.Mode</td>
+        </tr>
+        <tr>
+            <td><strong>Status</strong></td>
+            <td>
+                <span class="hb-badge" style="background:@(_status.Status == "HEALTHY" ? "#28a745" : "#dc3545")">
+                    @_status.Status
+                </span>
+            </td>
+        </tr>
+        <tr>
+            <td><strong>Last Heartbeat</strong></td>
+            <td>@(_status.LastHeartbeat?.ToString("yyyy-MM-dd HH:mm:ss") ?? "—")</td>
+        </tr>
+        <tr>
+            <td><strong>Uptime</strong></td>
+            <td>@FormatUptime(_status.Uptime)</td>
+        </tr>
+        <tr>
+            <td><strong>Next action in</strong></td>
+            <td>@_countdown s</td>
+        </tr>
+    </table>
+}
+
+<style>
+    .hb-table td { padding: 6px 16px 6px 0; vertical-align: middle; }
+    .hb-badge { color: white; padding: 3px 10px; border-radius: 4px; font-weight: bold; }
+</style>
+
+@code {
+    private StatusDto? _status;
+    private int _countdown;
+    private System.Timers.Timer? _secondTimer;
+    private CancellationTokenSource _cts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+        _countdown = _status?.IntervalSeconds ?? 30;
+
+        _secondTimer = new System.Timers.Timer(1000);
+        _secondTimer.Elapsed += async (_, _) =>
+        {
+            _countdown = Math.Max(0, _countdown - 1);
+            await InvokeAsync(StateHasChanged);
+        };
+        _secondTimer.Start();
+
+        _ = PollLoopAsync(_cts.Token);
+    }
+
+    private async Task PollLoopAsync(CancellationToken ct)
+    {
+        while (!ct.IsCancellationRequested)
+        {
+            await Task.Delay(3000, ct).ConfigureAwait(false);
+            var prevHb = _status?.LastHeartbeat;
+            await RefreshAsync();
+            if (_status?.LastHeartbeat != prevHb)
+                _countdown = _status?.IntervalSeconds ?? 30;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        try { _status = await Http.GetFromJsonAsync<StatusDto>("api/status"); }
+        catch { }
+    }
+
+    private static string FormatUptime(TimeSpan t)
+        => $"{(int)t.TotalHours:D2}:{t.Minutes:D2}:{t.Seconds:D2}";
+
+    public void Dispose()
+    {
+        _cts.Cancel();
+        _secondTimer?.Dispose();
+    }
+}
