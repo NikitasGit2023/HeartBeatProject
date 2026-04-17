@@ -27,6 +27,7 @@ public sealed class RuntimeSettingsStore
         };
     }
 
+    //Write and read to file are thread safe, that why use lock is neccesary.
     public SettingsDto Get() { lock (_lock) return _current; }
     public void Update(SettingsDto dto) { lock (_lock) _current = dto; }
 }

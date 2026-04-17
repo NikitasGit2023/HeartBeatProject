@@ -15,9 +15,10 @@ public sealed class SmtpAlertService : IAlertService
         _options = options.Value;
     }
 
+    //sending alerts using email.
     public async Task SendAlertAsync(string subject, string message, CancellationToken cancellationToken = default)
     {
-        if (!_options.EnableEmail) return;
+        if (!_options.EnableEmail) return; //if emable sending is disabled
 
         try
         {
