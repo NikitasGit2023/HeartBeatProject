@@ -1,18 +1,26 @@
+using HeartBeatProject.server.Services.Alerts;
+
 namespace HeartBeatProject.server.Services;
 
 public sealed class HeartbeatTxService : BackgroundService
 {
     private readonly ILogger<HeartbeatTxService> _logger;
-    private readonly string _folderPath;
+    private readonly IHeartbeatFileGenerator _fileGenerator;
+    private readonly IAlertService _alertService;
     private readonly TimeSpan _interval;
     private readonly bool _enabled;
 
-    public HeartbeatTxService(IConfiguration config, ILogger<HeartbeatTxService> logger)
+    public HeartbeatTxService(
+        IConfiguration config,
+        ILogger<HeartbeatTxService> logger,
+        IHeartbeatFileGenerator fileGenerator,
+        IAlertService alertService)
     {
-        _logger     = logger;
-        _enabled    = config["Heartbeat:Mode"] == "TX";
-        _folderPath = config["Heartbeat:FolderPath"] ?? "C:\\Heartbeat";
-        _interval   = TimeSpan.FromSeconds(config.GetValue<int>("Heartbeat:IntervalSeconds", 30));
+        _logger        = logger;
+        _fileGenerator = fileGenerator;
+        _alertService  = alertService;
+        _enabled       = config["Heartbeat:Mode"] == "TX";
+        _interval      = TimeSpan.FromSeconds(config.GetValue<int>("Heartbeat:IntervalSeconds", 30));
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -23,25 +31,22 @@ public sealed class HeartbeatTxService : BackgroundService
             return;
         }
 
-        _logger.LogInformation("HeartbeatTxService started. Folder: {Folder}, Interval: {Interval}s",
-            _folderPath, _interval.TotalSeconds);
+        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _interval.TotalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                Directory.CreateDirectory(_folderPath);
-
-                var fileName = $"heartbeat_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-                var filePath = Path.Combine(_folderPath, fileName);
-
-                await File.WriteAllTextAsync(filePath, "alive", stoppingToken);
-
-                _logger.LogInformation("Heartbeat written: {File}", fileName);
+                await _fileGenerator.GenerateAsync(stoppingToken);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
-                _logger.LogError(ex, "Failed to write heartbeat file.");
+                _logger.LogError(ex, "[{Time}] Heartbeat file generation failed.", DateTime.Now);
+
+                await _alertService.SendAlertAsync(
+                    subject: "Heartbeat TX Failure",
+                    message: $"Failed to write heartbeat file at {DateTime.Now}.\n\nError: {ex.Message}",
+                    cancellationToken: stoppingToken);
             }
 
             await Task.Delay(_interval, stoppingToken);

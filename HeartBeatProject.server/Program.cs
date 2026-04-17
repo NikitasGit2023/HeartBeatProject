@@ -1,3 +1,5 @@
+using HeartBeatProject.server.Services;
+using HeartBeatProject.server.Services.Alerts;
 using Microsoft.AspNetCore.Components.WebAssembly.Server;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -5,7 +7,9 @@ var builder = WebApplication.CreateBuilder(args);
 //// Add services to the container.
 
 builder.Services.AddControllers();
-builder.Services.AddHostedService<HeartBeatProject.server.Services.HeartbeatTxService>();
+builder.Services.AddSingleton<IHeartbeatFileGenerator, HeartbeatFileGenerator>();
+builder.Services.AddSingleton<IAlertService, SmtpAlertService>();
+builder.Services.AddHostedService<HeartbeatTxService>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
