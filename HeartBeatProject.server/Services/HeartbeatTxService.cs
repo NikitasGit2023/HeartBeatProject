@@ -30,7 +30,7 @@ public sealed class HeartbeatTxService : BackgroundService
         {
             try
             {
-                Directory.CreateDireory(_folderPath);
+                Directory.CreateDirectory(_folderPath);
 
                 var fileName = $"heartbeat_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
                 var filePath = Path.Combine(_folderPath, fileName);
