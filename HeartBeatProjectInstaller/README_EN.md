@@ -36,6 +36,19 @@ In a real deployment, TX and RX run on **separate machines** sharing a network f
 
 ---
 
+## System Requirements
+
+| Requirement | Details |
+|---|---|
+| **Operating System** | Windows 10, Windows 11, or Windows Server |
+| **Permissions** | Administrator privileges required for installation (needed to register the Windows Service) |
+| **Runtime** | None — the application is published as a self-contained executable, no .NET installation needed |
+| **Network** | Access to `http://localhost:5000` for the Web UI |
+
+> The application runs as a Windows Service and uses Windows-specific APIs, so it cannot run on Linux or macOS.
+
+---
+
 ## Installation
 
 ### 1. Publish the server
