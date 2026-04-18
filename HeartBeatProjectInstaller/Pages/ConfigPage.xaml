@@ -1,0 +1,134 @@
+<UserControl x:Class="HeartBeatProjectInstaller.Pages.ConfigPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="White">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Margin="40,25,40,20">
+
+            <TextBlock Text="Configuration" FontSize="20" FontWeight="Bold" Foreground="#1565C0" Margin="0,0,0,4"/>
+            <TextBlock Text="Configure the Heartbeat Monitoring Service" FontSize="13"
+                       Foreground="#757575" Margin="0,0,0,22"/>
+
+            <!-- Mode -->
+            <TextBlock Text="SERVICE MODE" FontSize="11" FontWeight="SemiBold" Foreground="#9E9E9E"
+                       Margin="0,0,0,8"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <RadioButton x:Name="TxRadio" Content="TX – Transmitter" GroupName="Mode"
+                             IsChecked="True" Checked="Mode_Changed"
+                             FontSize="13" VerticalContentAlignment="Center"/>
+                <TextBlock Text="(sends heartbeat signals)" FontSize="12" Foreground="#9E9E9E"
+                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,18">
+                <RadioButton x:Name="RxRadio" Content="RX – Receiver" GroupName="Mode"
+                             Checked="Mode_Changed"
+                             FontSize="13" VerticalContentAlignment="Center"/>
+                <TextBlock Text="(monitors for heartbeat signals)" FontSize="12" Foreground="#9E9E9E"
+                           VerticalAlignment="Center" Margin="8,0,0,0"/>
+            </StackPanel>
+
+            <Rectangle Height="1" Fill="#E0E0E0" Margin="0,0,0,18"/>
+
+            <!-- Folder Path -->
+            <TextBlock Text="FOLDER PATH" FontSize="11" FontWeight="SemiBold" Foreground="#9E9E9E"
+                       Margin="0,0,0,6"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="FolderPathBox" Grid.Column="0" FontSize="13" Height="32"
+                         VerticalContentAlignment="Center" Padding="8,0" BorderBrush="#BDBDBD"/>
+                <Button Grid.Column="1" Content="Browse…" Margin="8,0,0,0"
+                        Height="32" Padding="14,0" FontSize="13"
+                        Background="#F5F5F5" BorderBrush="#BDBDBD" Cursor="Hand"
+                        Click="Browse_Click"/>
+            </Grid>
+            <TextBlock Text="The folder where heartbeat files are read or written."
+                       FontSize="11" Foreground="#9E9E9E" Margin="0,2,0,18"/>
+
+            <Rectangle Height="1" Fill="#E0E0E0" Margin="0,0,0,18"/>
+
+            <!-- TX-only settings -->
+            <StackPanel x:Name="TxPanel">
+                <TextBlock Text="TRANSMITTER SETTINGS" FontSize="11" FontWeight="SemiBold"
+                           Foreground="#9E9E9E" Margin="0,0,0,12"/>
+                <TextBlock Text="Heartbeat Interval (seconds)" FontSize="13" Foreground="#424242"
+                           Margin="0,0,0,5"/>
+                <TextBox x:Name="IntervalBox" Text="30" FontSize="13" Height="32" Width="120"
+                         HorizontalAlignment="Left" VerticalContentAlignment="Center"
+                         Padding="8,0" BorderBrush="#BDBDBD"/>
+                <TextBlock Text="How often to write a heartbeat signal to the folder."
+                           FontSize="11" Foreground="#9E9E9E" Margin="0,4,0,18"/>
+                <Rectangle Height="1" Fill="#E0E0E0" Margin="0,0,0,18"/>
+            </StackPanel>
+
+            <!-- RX-only settings -->
+            <StackPanel x:Name="RxPanel" Visibility="Collapsed">
+                <TextBlock Text="RECEIVER SETTINGS" FontSize="11" FontWeight="SemiBold"
+                           Foreground="#9E9E9E" Margin="0,0,0,12"/>
+
+                <TextBlock Text="Check Interval (seconds)" FontSize="13" Foreground="#424242"
+                           Margin="0,0,0,5"/>
+                <TextBox x:Name="CheckIntervalBox" Text="30" FontSize="13" Height="32" Width="120"
+                         HorizontalAlignment="Left" VerticalContentAlignment="Center"
+                         Padding="8,0" BorderBrush="#BDBDBD"/>
+                <TextBlock Text="How often to check the folder for a heartbeat file."
+                           FontSize="11" Foreground="#9E9E9E" Margin="0,4,0,14"/>
+
+                <TextBlock Text="Alert Threshold (seconds)" FontSize="13" Foreground="#424242"
+                           Margin="0,0,0,5"/>
+                <TextBox x:Name="ThresholdBox" Text="90" FontSize="13" Height="32" Width="120"
+                         HorizontalAlignment="Left" VerticalContentAlignment="Center"
+                         Padding="8,0" BorderBrush="#BDBDBD"/>
+                <TextBlock Text="Trigger an alert if no heartbeat is seen within this time."
+                           FontSize="11" Foreground="#9E9E9E" Margin="0,4,0,18"/>
+                <Rectangle Height="1" Fill="#E0E0E0" Margin="0,0,0,18"/>
+            </StackPanel>
+
+            <!-- Email Alerts (optional) -->
+            <TextBlock Text="EMAIL ALERTS  (optional)" FontSize="11" FontWeight="SemiBold"
+                       Foreground="#9E9E9E" Margin="0,0,0,12"/>
+            <CheckBox x:Name="EnableEmailCheck" Content="Enable email alerts" FontSize="13"
+                      Foreground="#424242" Margin="0,0,0,14"
+                      Checked="EnableEmail_Changed" Unchecked="EnableEmail_Changed"/>
+            <StackPanel x:Name="SmtpPanel" Visibility="Collapsed">
+                <Grid Margin="0,0,0,12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="110"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="SMTP Server" FontSize="13" Foreground="#424242" Margin="0,0,0,5"/>
+                        <TextBox x:Name="SmtpServerBox" FontSize="13" Height="32"
+                                 VerticalContentAlignment="Center" Padding="8,0" BorderBrush="#BDBDBD"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Port" FontSize="13" Foreground="#424242" Margin="0,0,0,5"/>
+                        <TextBox x:Name="SmtpPortBox" Text="587" FontSize="13" Height="32"
+                                 VerticalContentAlignment="Center" Padding="8,0" BorderBrush="#BDBDBD"/>
+                    </StackPanel>
+                </Grid>
+                <Grid Margin="0,0,0,20">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="From Address" FontSize="13" Foreground="#424242" Margin="0,0,0,5"/>
+                        <TextBox x:Name="FromBox" FontSize="13" Height="32"
+                                 VerticalContentAlignment="Center" Padding="8,0" BorderBrush="#BDBDBD"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="To Address" FontSize="13" Foreground="#424242" Margin="0,0,0,5"/>
+                        <TextBox x:Name="ToBox" FontSize="13" Height="32"
+                                 VerticalContentAlignment="Center" Padding="8,0" BorderBrush="#BDBDBD"/>
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
