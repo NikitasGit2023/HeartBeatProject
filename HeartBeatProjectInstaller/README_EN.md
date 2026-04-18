@@ -70,21 +70,16 @@ Launch `HeartBeatProjectInstaller.exe` as Administrator and follow the wizard:
 
 ## Usage
 
-Once installed, the service runs in the background as a Windows Service and starts automatically on boot.
+After installation, the application does not start automatically. To run it:
 
-Access the Web UI by opening a browser and navigating to:
+1. Navigate to the installation/publish folder
+2. Run `HeartBeatProject.exe`
+
+Once running, open a browser and navigate to:
 
 ```
 http://localhost:5000
 ```
-
-The dashboard shows:
-- Current status (HEALTHY / DOWN)
-- Active mode (TX / RX)
-- Last heartbeat time
-- Live log stream with category filters (TX, RX, Email, System)
-
-Settings can be adjusted at runtime from the Settings page without restarting the service. Note that runtime changes are not persisted — edit `appsettings.json` and restart the service for permanent changes.
 
 ---
 
