@@ -1,5 +1,6 @@
 using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Services.Alerts;
+using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services;
 /// <summary>
@@ -16,9 +17,13 @@ public sealed class HeartbeatRxService : BackgroundService
     private readonly ILogger<HeartbeatRxService> _logger;
     private readonly IAlertService _alertService;
     private readonly RuntimeSettingsStore _settingsStore;
+    private readonly HeartbeatOptions _staticOptions;
+    private readonly TimeSpan _alertCooldown = TimeSpan.FromMinutes(5);
     private volatile bool _isHealthy = true;
+    private DateTime _lastAlertTime = DateTime.MinValue;
 
     public HeartbeatRxService(
+        IOptions<HeartbeatOptions> options,
         ILogger<HeartbeatRxService> logger,
         IAlertService alertService,
         RuntimeSettingsStore settingsStore)
@@ -26,6 +31,7 @@ public sealed class HeartbeatRxService : BackgroundService
         _logger        = logger;
         _alertService  = alertService;
         _settingsStore = settingsStore;
+        _staticOptions = options.Value;
     }
 
 
@@ -33,11 +39,12 @@ public sealed class HeartbeatRxService : BackgroundService
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
         var initial = _settingsStore.Get();
-        _logger.LogInformation("HeartbeatRxService started. Folder: {Folder}, Threshold: {Threshold}s",
-            initial.FolderPath, initial.ThresholdSeconds);
+        _logger.LogInformation("HeartbeatRxService started. Mode: {Mode}, Folder: {Folder}, Threshold: {Threshold}s, Check interval: {Interval}s",
+            _staticOptions.Mode, initial.FolderPath, initial.ThresholdSeconds, initial.CheckIntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
+            _logger.LogInformation("RX: Monitoring cycle started");
             try
             {
                 await CheckAsync(stoppingToken);
@@ -46,8 +53,8 @@ public sealed class HeartbeatRxService : BackgroundService
             {
                 _logger.LogError(ex, "[{Time}] Unexpected error in HeartbeatRxService.", DateTime.Now);
                 await TransitionToDownAsync(
-                    "Heartbeat RX — Unexpected Error",
-                    $"Unexpected error at {DateTime.Now}.\n\nError: {ex.Message}",
+                    "Heartbeat RX \u2014 Unexpected Error",
+                    $"Mode: RX\nTimestamp: {DateTime.Now}\n\nUnexpected error: {ex.Message}",
                     stoppingToken);
             }
 
@@ -65,8 +72,8 @@ public sealed class HeartbeatRxService : BackgroundService
         {
             _logger.LogWarning("[{Time}] Heartbeat folder not found: {Folder}.", DateTime.Now, settings.FolderPath);
             await TransitionToDownAsync(
-                "Heartbeat RX — Folder Missing",
-                $"Folder '{settings.FolderPath}' does not exist at {DateTime.Now}.",
+                "Heartbeat RX \u2014 Folder Missing",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nTimestamp: {DateTime.Now}\n\nThe heartbeat folder does not exist.",
                 cancellationToken);
             return;
         }
@@ -82,8 +89,8 @@ public sealed class HeartbeatRxService : BackgroundService
         {
             _logger.LogWarning("[{Time}] No heartbeat files found in {Folder}.", DateTime.Now, settings.FolderPath);
             await TransitionToDownAsync(
-                "Heartbeat RX — No Files",
-                $"No heartbeat files found in '{settings.FolderPath}' at {DateTime.Now}.",
+                "Heartbeat RX \u2014 No Files",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nTimestamp: {DateTime.Now}\n\nNo heartbeat files found in the monitored folder.",
                 cancellationToken);
             return;
         }
@@ -97,30 +104,50 @@ public sealed class HeartbeatRxService : BackgroundService
         //// Check if the latest heartbeat file is older than the allowed threshold
         if (age.TotalSeconds > settings.ThresholdSeconds)
         {
+            _logger.LogWarning("RX: Threshold exceeded. Last file '{File}' is {Age:F0}s old (threshold: {Threshold}s).",
+                latestFile.Name, age.TotalSeconds, settings.ThresholdSeconds);
             await TransitionToDownAsync(
-                "Heartbeat RX — Threshold Exceeded",
-                $"Last file '{latestFile.Name}' is {age.TotalSeconds:F0}s old (threshold: {settings.ThresholdSeconds}s).",
+                "Heartbeat RX \u2014 Threshold Exceeded",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nLast file: {latestFile.Name}\nLast written: {latestFile.LastWriteTime}\nAge: {age.TotalSeconds:F0}s (threshold: {settings.ThresholdSeconds}s)\nTimestamp: {DateTime.Now}",
                 cancellationToken);
         }
         else
         {
+            _logger.LogInformation("RX: Heartbeat OK. Last file at {Time}", latestFile.LastWriteTime);
             TransitionToHealthy();
         }
     }
 
     private async Task TransitionToDownAsync(string subject, string message, CancellationToken cancellationToken)
     {
-        if (!_isHealthy) return;
+        if (!_isHealthy)
+        {
+            _logger.LogWarning("RX: Still DOWN. Waiting for recovery.");
+            return;
+        }
 
-        _logger.LogWarning("[{Time}] Status: HEALTHY → DOWN", DateTime.Now);
+        _logger.LogWarning("RX: Status: HEALTHY \u2192 DOWN");
         _isHealthy = false;
+
+        var now = DateTime.Now;
+        var timeSinceLastAlert = now - _lastAlertTime;
+
+        if (timeSinceLastAlert < _alertCooldown)
+        {
+            _logger.LogWarning("RX: Alert skipped — cooldown active. Next alert in {Remaining:F0}s.",
+                (_alertCooldown - timeSinceLastAlert).TotalSeconds);
+            return;
+        }
+
+        _lastAlertTime = now;
+        _logger.LogInformation("RX: Sending alert email. Subject: {Subject}", subject);
         await _alertService.SendAlertAsync(subject, message, cancellationToken);
     }
 
     private void TransitionToHealthy()
     {
         if (!_isHealthy)
-            _logger.LogInformation("[{Time}] Status: DOWN → HEALTHY", DateTime.Now);
+            _logger.LogInformation("[{Time}] Status: DOWN \u2192 HEALTHY", DateTime.Now);
 
         _isHealthy = true;
     }

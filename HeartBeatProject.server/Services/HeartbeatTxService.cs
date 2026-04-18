@@ -38,7 +38,15 @@ public sealed class HeartbeatTxService : BackgroundService
     //Starting the background service
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _staticOptions.IntervalSeconds);
+        _logger.LogInformation("HeartbeatTxService started. Mode: {Mode}", _staticOptions.Mode);
+
+        if (!_staticOptions.Mode.Equals("TX", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogInformation("HeartbeatTxService: Mode is '{Mode}' — TX execution skipped.", _staticOptions.Mode);
+            return;
+        }
+
+        _logger.LogInformation("HeartbeatTxService: Running. Interval: {Interval}s", _staticOptions.IntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -61,9 +69,10 @@ public sealed class HeartbeatTxService : BackgroundService
                 if (_lastWasSuccess)
                 {
                     _lastWasSuccess = false;
+                    var folder = _settingsStore.Get().FolderPath;
                     await _alertService.SendAlertAsync(
-                        subject: "Heartbeat TX Failure",
-                        message: $"Failed to write heartbeat file at {DateTime.Now}.\n\nError: {ex.Message}",
+                        subject: "Heartbeat TX — File Generation Failed",
+                        message: $"Mode: TX\nFolder: {folder}\nTimestamp: {DateTime.Now}\n\nError: {ex.Message}",
                         cancellationToken: stoppingToken);
                 }
             }

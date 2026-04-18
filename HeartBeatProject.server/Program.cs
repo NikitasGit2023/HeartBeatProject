@@ -14,17 +14,16 @@ builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection(AlertO
 //// In-memory log store — created early so the provider can be wired before DI build
 var logStore = new InMemoryLogStore();
 builder.Services.AddSingleton<ILogStore>(logStore);
+builder.Logging.ClearProviders();
+builder.Logging.SetMinimumLevel(LogLevel.Information);
 builder.Logging.AddProvider(new InMemoryLoggerProvider(logStore));
 
 //// Services
 builder.Services.AddSingleton<RuntimeSettingsStore>();
 builder.Services.AddSingleton<IHeartbeatFileGenerator, HeartbeatFileGenerator>();
 builder.Services.AddSingleton<IAlertService, SmtpAlertService>();
-var heartbeatMode = builder.Configuration.GetSection(HeartbeatOptions.Section)["Mode"];
-if (heartbeatMode?.Equals("TX", StringComparison.OrdinalIgnoreCase) == true)
-    builder.Services.AddHostedService<HeartbeatTxService>();
-else
-    builder.Services.AddHostedService<HeartbeatRxService>();
+builder.Services.AddHostedService<HeartbeatTxService>();
+builder.Services.AddHostedService<HeartbeatRxService>();
 
 //// API
 builder.Services.AddControllers();

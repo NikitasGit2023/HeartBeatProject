@@ -15,10 +15,20 @@ public sealed class SmtpAlertService : IAlertService
         _options = options.Value;
     }
 
-    //sending alerts using email.
+    private bool HasFullCredentials =>
+        _options.EnableEmail &&
+        !string.IsNullOrWhiteSpace(_options.SmtpServer) &&
+        _options.Port > 0 &&
+        !string.IsNullOrWhiteSpace(_options.From) &&
+        !string.IsNullOrWhiteSpace(_options.To);
+
     public async Task SendAlertAsync(string subject, string message, CancellationToken cancellationToken = default)
     {
-        if (!_options.EnableEmail) return; //if email sending is disabled
+        if (!HasFullCredentials)
+        {
+            _logger.LogWarning("Email alert skipped: incomplete SMTP configuration.");
+            return;
+        }
 
         try
         {

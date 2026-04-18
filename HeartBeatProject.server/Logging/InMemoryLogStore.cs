@@ -28,7 +28,7 @@ public sealed class InMemoryLogStore : ILogStore
             {
                 Directory.CreateDirectory(LogDir);
                 File.AppendAllText(LogFile,
-                    $"[{entry.Timestamp:yyyy-MM-dd HH:mm:ss}] [{entry.Level,-11}] {entry.Message}{Environment.NewLine}");
+                    $"[{entry.Timestamp:yyyy-MM-dd HH:mm:ss}] [{entry.Level,-11}] [{entry.Category,-6}] {entry.Message}{Environment.NewLine}");
             }
             catch { /* never crash the service over a log write failure */ }
         }

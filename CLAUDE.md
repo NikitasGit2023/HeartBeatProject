@@ -21,12 +21,15 @@ dotnet run --project HeartBeatProject.server/HeartBeatProject.server.csproj
 
 # Build the WPF installer (Windows only)
 dotnet build HeartBeatProjectInstaller/HeartBeatProjectInstaller.csproj
+
+# Publish server as self-contained single-file executable (win-x64)
+dotnet publish HeartBeatProject.server/HeartBeatProject.server.csproj -c Release
 ```
 
 **Default URLs after `dotnet run` on the server:**
 - HTTP: http://localhost:5295
-- HTTPS: https://localhost:7266
-- Swagger UI: https://localhost:7266/swagger
+- HTTPS: https://localhost:7266 (launches to `/dashboard` by default)
+- Swagger UI: https://localhost:7266/swagger (development only)
 
 ## Architecture
 
@@ -34,35 +37,39 @@ Four projects in one solution:
 
 ### `HeartBeatProject` (Client — Blazor WebAssembly)
 - `HttpClient` is pre-injected with the server base address
-- Pages auto-poll the server API: Dashboard every 3 s, Logs every 2 s
+- Client-side polling: Dashboard every 3 s (plus a 1 s countdown timer for smooth UX), Logs every 2 s, Settings loaded once on init
 - Three real pages: `Pages/Dashboard.razor`, `Pages/Settings.razor`, `Pages/Logs.razor`
+- Boilerplate pages (`Home.razor`, `Counter.razor`, `Weather.razor`) can be removed
+- Shared CSS animations (spin, pulse-green, pulse-red, pulse-live) live in `wwwroot/css/app.css`
 
 ### `HeartBeatProject.server` (Server — ASP.NET Core)
 - Hosts Blazor WASM via `UseBlazorFrameworkFiles()` + `MapFallbackToFile("index.html")`
 - `Controllers/HeartbeatController.cs` exposes the real API (see below); `WeatherForecastController` is boilerplate
-- Two background services: `HeartbeatTxService` and `HeartbeatRxService` — only the one matching the configured mode actually runs
-- `Services/RuntimeSettingsStore.cs` — thread-safe in-memory store updated by `POST /api/settings`
-- Custom logging pipeline: all `ILogger` output flows through `InMemoryLoggerProvider` → `InMemoryLogStore` (circular queue, max 500 entries) and also writes to `Logs/heartbeat_YYYYMMDD.txt`
+- Two background services: `HeartbeatTxService` and `HeartbeatRxService` — only the one matching the configured mode is registered in `Program.cs`
+- `Services/RuntimeSettingsStore.cs` — lock-based thread-safe in-memory store, initialized from `appsettings.json`, updated by `POST /api/settings`
+- Custom logging: all `ILogger` output flows through `InMemoryLoggerProvider` → `InMemoryLogStore` (circular queue, max 500 entries, lock-based) and also writes to `{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt` (daily rotation). Only `Information` and above are captured.
+- Published as a self-contained `win-x64` single-file executable (see `.csproj`)
 
 ### `HeartBeatProject.shared` (Shared Library)
 - DTOs used by both client and server: `StatusDto`, `SettingsDto`, `LogEntryDto`
 
 ### `HeartBeatProjectInstaller` (WPF Windows Installer)
 - 4-step wizard: Welcome → Config → Install → Finish
-- `Services/InstallerService.cs` writes `appsettings.json` and manages the Windows service via `sc.exe`
+- `Services/InstallerService.cs` writes `appsettings.json` (merges via `JsonNode`, preserves existing keys) and manages the Windows service via `sc.exe`
+- Targets `net8.0-windows`; see `HeartBeatProjectInstaller/CLAUDE.md` for installer-specific guidance
 
 ## Heartbeat Flow
 
 ```
 TX mode:  HeartbeatTxService ──(every IntervalSeconds)──> IHeartbeatFileGenerator.GenerateAsync()
-                                                           └─> writes timestamped file to FolderPath
+                                                           └─> writes heartbeat_{YYYYMMDD_HHmmss}.txt to FolderPath
 
-RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath
+RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath for .txt files
                                                                 └─> HEALTHY if latest file age < ThresholdSeconds
-                                                                └─> DOWN + alert if age >= ThresholdSeconds
+                                                                └─> DOWN + alert on HEALTHY→DOWN transition only
 ```
 
-Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP).
+Alerts fire on state transitions only (not repeatedly while down). TX alerts on first failure only, then again on recovery. Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP).
 
 ## API Endpoints (`/api/`)
 
@@ -78,30 +85,36 @@ Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`).
 ```json
 {
   "Heartbeat": {
-    "Mode": "TX",              // "TX" or "RX"
+    "Mode": "TX",               // "TX" or "RX"
     "FolderPath": "...",
-    "IntervalSeconds": 30,     // TX: write interval
+    "FileNamePrefix": "heartbeat",
+    "IntervalSeconds": 30,      // TX: write interval
     "OverwriteExisting": true,
     "LogFolderPath": "...",
     "CheckIntervalSeconds": 10, // RX: scan interval
-    "ThresholdSeconds": 60     // RX: age before DOWN
+    "ThresholdSeconds": 60      // RX: age before DOWN
   },
   "Alerts": {
     "EnableEmail": false,
     "SmtpServer": "",
     "Port": 587,
     "From": "",
-    "To": ""
+    "To": "",
+    "Username": "",
+    "Password": "",
+    "EnableSsl": true
   }
 }
 ```
 
-Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — they do not persist to `appsettings.json`.
+Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — they do not persist to `appsettings.json`. `appsettings.json` is only written by the installer.
 
 ## Key Conventions
 
 - Nullable reference types enabled across all projects
+- All background service loops use `CancellationToken`; services swallow all exceptions except `OperationCanceledException`
+- Thread-safety: `RuntimeSettingsStore` and `InMemoryLogStore` use `lock`; `HeartbeatRxService` uses a `volatile` flag for HEALTHY/DOWN state
 - New alert providers: implement `IAlertService` and register in `Program.cs`
 - New Blazor pages: add to `HeartBeatProject/Pages/` with `@page "/route"` and link from `Layout/NavMenu.razor`
 - New API endpoints: add to `HeartBeatProject.server/Controllers/`
-- Shared data models: add to `HeartBeatProject.shared` DTOs folder
+- Shared data models: add to `HeartBeatProject.shared/Dtos/`

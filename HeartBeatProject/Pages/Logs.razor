@@ -13,12 +13,20 @@
         <span class="live-badge">
             <span class="live-dot"></span> LIVE
         </span>
-        <span class="log-count">@_logs.Count entries</span>
+        <span class="log-count">@_filtered.Count entries</span>
     </div>
 </div>
 
+<div class="filter-bar">
+    @foreach (var cat in _categories)
+    {
+        <button class="filter-btn @(_activeFilter == cat ? "active" : "")"
+                @onclick="() => SetFilter(cat)">@cat</button>
+    }
+</div>
+
 <div class="logs-card">
-    @if (_logs.Count == 0)
+    @if (_filtered.Count == 0)
     {
         <div class="empty-state">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -35,15 +43,17 @@
                 <tr>
                     <th style="width:90px">Time</th>
                     <th style="width:95px">Level</th>
+                    <th style="width:80px">Category</th>
                     <th>Message</th>
                 </tr>
             </thead>
             <tbody>
-                @foreach (var entry in _logs)
+                @foreach (var entry in _filtered)
                 {
                     <tr class="log-row">
                         <td class="log-time">@entry.Timestamp.ToString("HH:mm:ss")</td>
                         <td><span class="level-badge level-@entry.Level.ToLower()">@entry.Level</span></td>
+                        <td><span class="cat-badge cat-@entry.Category.ToLower()">@entry.Category</span></td>
                         <td class="log-msg">@entry.Message</td>
                     </tr>
                 }
@@ -53,7 +63,7 @@
 </div>
 
 <style>
-    .page-header   { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.75rem; flex-wrap: wrap; gap: 1rem; }
+    .page-header   { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem; }
     .page-title    { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
     .page-subtitle { font-size: 0.875rem; color: #64748b; }
 
@@ -69,6 +79,17 @@
     .live-dot { width: 7px; height: 7px; background: #22c55e; border-radius: 50%; animation: pulse-live 1.5s infinite; }
 
     .log-count { font-size: 0.8rem; color: #94a3b8; }
+
+    .filter-bar {
+        display: flex; gap: 6px; margin-bottom: 1rem; flex-wrap: wrap;
+    }
+    .filter-btn {
+        padding: 5px 16px; border-radius: 99px; border: 1.5px solid #cbd5e1;
+        background: #f8fafc; color: #475569; font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; transition: all 0.15s;
+    }
+    .filter-btn:hover  { border-color: #64748b; color: #1e293b; background: #f1f5f9; }
+    .filter-btn.active { background: #0f172a; color: white; border-color: #0f172a; }
 
     .logs-card {
         background: white;
@@ -106,28 +127,46 @@
     td { padding: 9px 16px; vertical-align: middle; }
 
     .level-badge {
-        display: inline-block;
-        padding: 2px 8px;
-        border-radius: 4px;
-        font-size: 0.68rem;
-        font-weight: 700;
-        letter-spacing: 0.5px;
-        text-transform: uppercase;
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
     }
     .level-information { background: #eff6ff; color: #2563eb; }
     .level-warning     { background: #fffbeb; color: #d97706; }
     .level-error       { background: #fef2f2; color: #dc2626; }
     .level-critical    { background: #dc2626; color: white; }
+
+    .cat-badge {
+        display: inline-block; padding: 2px 8px; border-radius: 4px;
+        font-size: 0.68rem; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase;
+    }
+    .cat-tx     { background: #f0fdf4; color: #15803d; }
+    .cat-rx     { background: #eff6ff; color: #1d4ed8; }
+    .cat-email  { background: #fdf4ff; color: #7e22ce; }
+    .cat-system { background: #f8fafc; color: #64748b; }
 </style>
 
 @code {
-    private List<LogEntryDto> _logs = new();
+    private static readonly string[] _categories = ["All", "TX", "RX", "Email", "System"];
+
+    private List<LogEntryDto> _logs     = new();
+    private string            _activeFilter = "All";
     private CancellationTokenSource _cts = new();
+
+    private List<LogEntryDto> _filtered =>
+        _activeFilter == "All"
+            ? _logs
+            : _logs.Where(x => x.Category == _activeFilter).ToList();
 
     protected override async Task OnInitializedAsync()
     {
         await RefreshAsync();
         _ = PollLoopAsync(_cts.Token);
+    }
+
+    private void SetFilter(string category)
+    {
+        _activeFilter = category;
+        StateHasChanged();
     }
 
     private async Task PollLoopAsync(CancellationToken ct)
