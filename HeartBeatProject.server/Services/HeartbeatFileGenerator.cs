@@ -11,24 +11,28 @@ public interface IHeartbeatFileGenerator
 public sealed class HeartbeatFileGenerator : IHeartbeatFileGenerator
 {
     private readonly ILogger<HeartbeatFileGenerator> _logger;
-    private readonly HeartbeatOptions _options;
+    private readonly HeartbeatOptions _staticOptions;
+    private readonly RuntimeSettingsStore _settingsStore;
 
-    public HeartbeatFileGenerator(IOptions<HeartbeatOptions> options, ILogger<HeartbeatFileGenerator> logger)
+    public HeartbeatFileGenerator(IOptions<HeartbeatOptions> options, ILogger<HeartbeatFileGenerator> logger, RuntimeSettingsStore settingsStore)
     {
-        _logger  = logger;
-        _options = options.Value;
+        _logger        = logger;
+        _staticOptions = options.Value;
+        _settingsStore = settingsStore;
     }
 
     public async Task GenerateAsync(CancellationToken cancellationToken = default)
     {
+        var folderPath = _settingsStore.Get().FolderPath;
+
         //creating directory if not existed inside user system
-        Directory.CreateDirectory(_options.FolderPath);
+        Directory.CreateDirectory(folderPath);
 
-        var fileName = $"{_options.FileNamePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
-        var filePath = Path.Combine(_options.FolderPath, fileName);
+        var fileName = $"{_staticOptions.FileNamePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+        var filePath = Path.Combine(folderPath, fileName);
 
-        // used for diable generating the same file twice
-        if (!_options.OverwriteExisting && File.Exists(filePath)) 
+        // used for disable generating the same file twice
+        if (!_staticOptions.OverwriteExisting && File.Exists(filePath))
         {
             _logger.LogInformation("[{Time}] Heartbeat skipped — file already exists: {File}",
                 DateTime.Now, fileName);

@@ -18,12 +18,17 @@ public sealed class SmtpAlertService : IAlertService
     //sending alerts using email.
     public async Task SendAlertAsync(string subject, string message, CancellationToken cancellationToken = default)
     {
-        if (!_options.EnableEmail) return; //if emable sending is disabled
+        if (!_options.EnableEmail) return; //if email sending is disabled
 
         try
         {
             using var client = new SmtpClient(_options.SmtpServer, _options.Port);
-            using var mail   = new MailMessage(_options.From, _options.To, subject, message);
+            client.EnableSsl = _options.EnableSsl;
+
+            if (!string.IsNullOrEmpty(_options.Username))
+                client.Credentials = new System.Net.NetworkCredential(_options.Username, _options.Password);
+
+            using var mail = new MailMessage(_options.From, _options.To, subject, message);
 
             await client.SendMailAsync(mail, cancellationToken);
 

@@ -20,8 +20,11 @@ builder.Logging.AddProvider(new InMemoryLoggerProvider(logStore));
 builder.Services.AddSingleton<RuntimeSettingsStore>();
 builder.Services.AddSingleton<IHeartbeatFileGenerator, HeartbeatFileGenerator>();
 builder.Services.AddSingleton<IAlertService, SmtpAlertService>();
-builder.Services.AddHostedService<HeartbeatTxService>();
-builder.Services.AddHostedService<HeartbeatRxService>();
+var heartbeatMode = builder.Configuration.GetSection(HeartbeatOptions.Section)["Mode"];
+if (heartbeatMode?.Equals("TX", StringComparison.OrdinalIgnoreCase) == true)
+    builder.Services.AddHostedService<HeartbeatTxService>();
+else
+    builder.Services.AddHostedService<HeartbeatRxService>();
 
 //// API
 builder.Services.AddControllers();

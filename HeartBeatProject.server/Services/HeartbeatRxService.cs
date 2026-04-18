@@ -1,6 +1,5 @@
 using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Services.Alerts;
-using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services;
 /// <summary>
@@ -16,25 +15,26 @@ public sealed class HeartbeatRxService : BackgroundService
 {
     private readonly ILogger<HeartbeatRxService> _logger;
     private readonly IAlertService _alertService;
-    private readonly HeartbeatOptions _options;
-    private bool _isHealthy = true;
+    private readonly RuntimeSettingsStore _settingsStore;
+    private volatile bool _isHealthy = true;
 
     public HeartbeatRxService(
-        IOptions<HeartbeatOptions> options,
         ILogger<HeartbeatRxService> logger,
-        IAlertService alertService)
+        IAlertService alertService,
+        RuntimeSettingsStore settingsStore)
     {
-        _logger       = logger;
-        _alertService = alertService;
-        _options      = options.Value;
+        _logger        = logger;
+        _alertService  = alertService;
+        _settingsStore = settingsStore;
     }
 
 
     //Starting the background service
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        var initial = _settingsStore.Get();
         _logger.LogInformation("HeartbeatRxService started. Folder: {Folder}, Threshold: {Threshold}s",
-            _options.FolderPath, _options.ThresholdSeconds);
+            initial.FolderPath, initial.ThresholdSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -51,36 +51,39 @@ public sealed class HeartbeatRxService : BackgroundService
                     stoppingToken);
             }
 
-            await Task.Delay(TimeSpan.FromSeconds(_options.CheckIntervalSeconds), stoppingToken);
+            var checkInterval = _settingsStore.Get().CheckIntervalSeconds;
+            await Task.Delay(TimeSpan.FromSeconds(checkInterval), stoppingToken);
         }
     }
 
     private async Task CheckAsync(CancellationToken cancellationToken)
     {
-        //Checikg whether heartbeat forlder is created
-        if (!Directory.Exists(_options.FolderPath))
+        var settings = _settingsStore.Get();
+
+        //Checking whether heartbeat folder is created
+        if (!Directory.Exists(settings.FolderPath))
         {
-            _logger.LogWarning("[{Time}] Heartbeat folder not found: {Folder}.", DateTime.Now, _options.FolderPath);
+            _logger.LogWarning("[{Time}] Heartbeat folder not found: {Folder}.", DateTime.Now, settings.FolderPath);
             await TransitionToDownAsync(
                 "Heartbeat RX — Folder Missing",
-                $"Folder '{_options.FolderPath}' does not exist at {DateTime.Now}.",
+                $"Folder '{settings.FolderPath}' does not exist at {DateTime.Now}.",
                 cancellationToken);
             return;
         }
 
-        //looking for the lastest file
+        //looking for the latest file
         var latestFile = Directory
-            .EnumerateFiles(_options.FolderPath, "*.txt")
+            .EnumerateFiles(settings.FolderPath, "*.txt")
             .Select(f => new FileInfo(f))
             .OrderByDescending(f => f.LastWriteTime)
             .FirstOrDefault();
 
         if (latestFile is null)
         {
-            _logger.LogWarning("[{Time}] No heartbeat files found in {Folder}.", DateTime.Now, _options.FolderPath);
+            _logger.LogWarning("[{Time}] No heartbeat files found in {Folder}.", DateTime.Now, settings.FolderPath);
             await TransitionToDownAsync(
                 "Heartbeat RX — No Files",
-                $"No heartbeat files found in '{_options.FolderPath}' at {DateTime.Now}.",
+                $"No heartbeat files found in '{settings.FolderPath}' at {DateTime.Now}.",
                 cancellationToken);
             return;
         }
@@ -92,11 +95,11 @@ public sealed class HeartbeatRxService : BackgroundService
             DateTime.Now, latestFile.Name, age.TotalSeconds);
 
         //// Check if the latest heartbeat file is older than the allowed threshold
-        if (age.TotalSeconds > _options.ThresholdSeconds)
+        if (age.TotalSeconds > settings.ThresholdSeconds)
         {
             await TransitionToDownAsync(
                 "Heartbeat RX — Threshold Exceeded",
-                $"Last file '{latestFile.Name}' is {age.TotalSeconds:F0}s old (threshold: {_options.ThresholdSeconds}s).",
+                $"Last file '{latestFile.Name}' is {age.TotalSeconds:F0}s old (threshold: {settings.ThresholdSeconds}s).",
                 cancellationToken);
         }
         else
