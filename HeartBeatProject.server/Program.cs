@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Logging;
 using HeartBeatProject.server.Services;
@@ -35,6 +36,13 @@ if (app.Environment.IsDevelopment())
     app.UseSwagger();
     app.UseSwaggerUI();
 }
+
+// Open browser once server is ready
+app.Lifetime.ApplicationStarted.Register(() =>
+{
+    var url = app.Configuration["Urls"] ?? "http://localhost:5000";
+    Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+});
 
 app.UseHttpsRedirection();
 app.UseBlazorFrameworkFiles();
