@@ -1,6 +1,6 @@
 using HeartBeatProject.Shared.Dtos;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Server.Services;
 
 public interface IHeartbeatStatusService
 {

@@ -1,6 +1,7 @@
-using HeartBeatProject.server.Services.Alerts;
+using HeartBeatProject.Server.Services;
+using HeartBeatProject.Server.Services.Alerts;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Rx.Services;
 
 public sealed class HeartbeatRxService : BackgroundService
 {
@@ -80,7 +81,6 @@ public sealed class HeartbeatRxService : BackgroundService
         }
 
         var age = DateTime.UtcNow - latestFile.LastWriteTimeUtc;
-
         _logger.LogInformation("RX: Latest heartbeat: {File} ({Age:F1}s ago)", latestFile.Name, age.TotalSeconds);
 
         if (age.TotalSeconds > settings.ThresholdSeconds)

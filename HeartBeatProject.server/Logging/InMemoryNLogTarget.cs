@@ -2,7 +2,7 @@ using HeartBeatProject.Shared.Dtos;
 using NLog;
 using NLog.Targets;
 
-namespace HeartBeatProject.server.Logging;
+namespace HeartBeatProject.Server.Logging;
 
 public sealed class InMemoryNLogTarget : TargetWithLayout
 {

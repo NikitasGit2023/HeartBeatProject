@@ -1,24 +1,18 @@
-using HeartBeatProject.server.Configuration;
+using HeartBeatProject.Server.Services;
 using HeartBeatProject.Shared.Dtos;
-using Microsoft.Extensions.Options;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Rx.Services;
 
-public sealed class HeartbeatStatusService : IHeartbeatStatusService
+public sealed class RxHeartbeatStatusService : IHeartbeatStatusService
 {
-    private readonly ILogger<HeartbeatStatusService> _logger;
-    private readonly IOptions<HeartbeatOptions> _heartbeatOptions;
+    private readonly ILogger<RxHeartbeatStatusService> _logger;
     private readonly RuntimeSettingsStore _settingsStore;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
-    public HeartbeatStatusService(
-        IOptions<HeartbeatOptions> heartbeatOptions,
-        RuntimeSettingsStore settingsStore,
-        ILogger<HeartbeatStatusService> logger)
+    public RxHeartbeatStatusService(RuntimeSettingsStore settingsStore, ILogger<RxHeartbeatStatusService> logger)
     {
-        _heartbeatOptions = heartbeatOptions;
-        _settingsStore    = settingsStore;
-        _logger           = logger;
+        _settingsStore = settingsStore;
+        _logger        = logger;
     }
 
     public StatusDto GetStatus()
@@ -56,13 +50,11 @@ public sealed class HeartbeatStatusService : IHeartbeatStatusService
 
         return new StatusDto
         {
-            Mode            = _heartbeatOptions.Value.Mode,
+            Mode            = "RX",
             Status          = status,
             LastHeartbeat   = lastHeartbeat,
             Uptime          = DateTime.UtcNow - _startTime,
-            IntervalSeconds = _heartbeatOptions.Value.Mode.Equals("RX", StringComparison.OrdinalIgnoreCase)
-                ? settings.CheckIntervalSeconds
-                : settings.IntervalSeconds
+            IntervalSeconds = settings.CheckIntervalSeconds
         };
     }
 }

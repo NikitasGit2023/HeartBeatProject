@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.Mail;
 using HeartBeatProject.Shared.Dtos;
 
-namespace HeartBeatProject.server.Services.Alerts;
+namespace HeartBeatProject.Server.Services.Alerts;
 
 public sealed class SmtpAlertService : IAlertService
 {

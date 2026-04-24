@@ -2,7 +2,7 @@ using System.Net;
 using Lextm.SharpSnmpLib;
 using Lextm.SharpSnmpLib.Messaging;
 
-namespace HeartBeatProject.server.Services.Alerts;
+namespace HeartBeatProject.Server.Services.Alerts;
 
 public sealed class SnmpTrapSender : ISnmpTrapSender
 {

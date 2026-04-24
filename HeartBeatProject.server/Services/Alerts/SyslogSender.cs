@@ -1,6 +1,6 @@
 using NLog;
 
-namespace HeartBeatProject.server.Services.Alerts;
+namespace HeartBeatProject.Server.Services.Alerts;
 
 /// <summary>
 /// Sends alerts to a Syslog server via the NLog.Targets.Syslog pipeline.

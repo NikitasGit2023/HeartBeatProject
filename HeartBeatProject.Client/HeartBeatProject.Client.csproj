@@ -4,6 +4,9 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Keep assembly/root namespace unchanged so .razor files and index.html need no edits -->
+    <AssemblyName>HeartBeatProject</AssemblyName>
+    <RootNamespace>HeartBeatProject</RootNamespace>
     <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
@@ -13,7 +16,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HeartBeatProject.shared\HeartBeatProject.shared.csproj" />
+    <ProjectReference Include="..\HeartBeatProject.Shared\HeartBeatProject.Shared.csproj" />
   </ItemGroup>
 
   <ItemGroup>

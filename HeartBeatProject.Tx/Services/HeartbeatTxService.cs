@@ -1,6 +1,7 @@
-using HeartBeatProject.server.Services.Alerts;
+using HeartBeatProject.Server.Services;
+using HeartBeatProject.Server.Services.Alerts;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Tx.Services;
 
 public sealed class HeartbeatTxService : BackgroundService
 {

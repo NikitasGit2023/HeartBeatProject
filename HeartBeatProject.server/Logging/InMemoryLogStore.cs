@@ -1,6 +1,6 @@
 using HeartBeatProject.Shared.Dtos;
 
-namespace HeartBeatProject.server.Logging;
+namespace HeartBeatProject.Server.Logging;
 
 public interface ILogStore
 {

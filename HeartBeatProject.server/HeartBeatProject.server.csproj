@@ -1,44 +1,27 @@
-﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
-    <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <!-- Strip debug symbols and IIS config from publish output -->
-    <DebugType>none</DebugType>
-    <DebugSymbols>false</DebugSymbols>
-    <IsTransformWebConfigDisabled>true</IsTransformWebConfigDisabled>
   </PropertyGroup>
 
   <ItemGroup>
-	<PackageReference Include="Lextm.SharpSnmpLib" Version="12.5.7" />
-	<PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="8.0.0" />
-	<PackageReference Include="NLog.Targets.Syslog" Version="7.0.0" />
-	<PackageReference Include="NLog.Web.AspNetCore" Version="5.3.15" />
-    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <!-- Restore ASP.NET Core implicit usings that Sdk.Web provides but Sdk.NET does not -->
+    <Using Include="Microsoft.AspNetCore.Builder" />
+    <Using Include="Microsoft.AspNetCore.Http" />
+    <Using Include="Microsoft.AspNetCore.Mvc" />
+    <Using Include="Microsoft.Extensions.DependencyInjection" />
+    <Using Include="Microsoft.Extensions.Hosting" />
+    <Using Include="Microsoft.Extensions.Logging" />
+    <PackageReference Include="Lextm.SharpSnmpLib" Version="12.5.7" />
+    <PackageReference Include="NLog.Targets.Syslog" Version="7.0.0" />
+    <PackageReference Include="NLog.Web.AspNetCore" Version="5.3.15" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- nlog.config must sit beside the executable at runtime -->
-    <None Update="nlog.config">
-      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
-      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
-    </None>
-    <!-- Exclude dev-only and tooling files from publish -->
-    <None Update="dotnet-tools.json">
-      <CopyToPublishDirectory>Never</CopyToPublishDirectory>
-    </None>
-    <!-- Exclude Blazor debug proxy (dev-time only) -->
-    <ResolvedFileToPublish Remove="$(OutDir)BlazorDebugProxy\**\*" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <ProjectReference Include="..\HeartBeatProject.shared\HeartBeatProject.shared.csproj" />	  
-    <ProjectReference Include="..\HeartBeatProject\HeartBeatProject.csproj" />
+    <ProjectReference Include="..\HeartBeatProject.shared\HeartBeatProject.shared.csproj" />
   </ItemGroup>
 
 </Project>

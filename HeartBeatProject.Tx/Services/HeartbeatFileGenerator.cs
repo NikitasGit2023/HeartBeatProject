@@ -1,7 +1,8 @@
-using HeartBeatProject.server.Configuration;
+using HeartBeatProject.Server.Configuration;
+using HeartBeatProject.Server.Services;
 using Microsoft.Extensions.Options;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Tx.Services;
 
 public interface IHeartbeatFileGenerator
 {

@@ -1,4 +1,4 @@
-namespace HeartBeatProject.server.Services.Alerts;
+namespace HeartBeatProject.Server.Services.Alerts;
 
 public sealed class CompositeAlertService : IAlertService
 {

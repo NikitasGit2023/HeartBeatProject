@@ -1,9 +1,9 @@
-using HeartBeatProject.server.Logging;
-using HeartBeatProject.server.Services;
+using HeartBeatProject.Server.Logging;
+using HeartBeatProject.Server.Services;
 using HeartBeatProject.Shared.Dtos;
 using Microsoft.AspNetCore.Mvc;
 
-namespace HeartBeatProject.server.Controllers;
+namespace HeartBeatProject.Server.Controllers;
 
 [ApiController]
 [Route("api")]

@@ -1,5 +1,7 @@
 <Solution>
-  <Project Path="../HeartBeatProject.server/HeartBeatProject.server.csproj" />
-  <Project Path="../HeartBeatProject.shared/HeartBeatProject.shared.csproj" />
-  <Project Path="HeartBeatProject.csproj" />
+  <Project Path="HeartBeatProject.shared/HeartBeatProject.shared.csproj" />
+  <Project Path="HeartBeatProject.Client/HeartBeatProject.Client.csproj" />
+  <Project Path="HeartBeatProject.server/HeartBeatProject.server.csproj" />
+  <Project Path="HeartBeatProject.Tx/HeartBeatProject.Tx.csproj" />
+  <Project Path="HeartBeatProject.Rx/HeartBeatProject.Rx.csproj" />
 </Solution>

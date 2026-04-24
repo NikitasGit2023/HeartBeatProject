@@ -1,10 +1,9 @@
-namespace HeartBeatProject.server.Configuration;
+namespace HeartBeatProject.Server.Configuration;
 
 public sealed class HeartbeatOptions
 {
     public const string Section = "Heartbeat";
 
-    public string Mode              { get; init; } = string.Empty;
     public string FolderPath        { get; init; } = string.Empty;
     public string FileNamePrefix    { get; init; } = "heartbeat";
     public int    IntervalSeconds   { get; init; } = 30;

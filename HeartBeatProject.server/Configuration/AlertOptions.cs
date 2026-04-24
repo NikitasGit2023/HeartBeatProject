@@ -1,4 +1,4 @@
-namespace HeartBeatProject.server.Configuration;
+namespace HeartBeatProject.Server.Configuration;
 
 public sealed class AlertOptions
 {

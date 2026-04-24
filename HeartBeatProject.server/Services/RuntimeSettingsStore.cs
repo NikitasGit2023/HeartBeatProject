@@ -1,9 +1,9 @@
 using System.Net.Mail;
-using HeartBeatProject.server.Configuration;
+using HeartBeatProject.Server.Configuration;
 using HeartBeatProject.Shared.Dtos;
 using Microsoft.Extensions.Options;
 
-namespace HeartBeatProject.server.Services;
+namespace HeartBeatProject.Server.Services;
 
 public sealed class RuntimeSettingsStore
 {
