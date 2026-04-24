@@ -10,33 +10,22 @@ public interface ILogStore
 
 public sealed class InMemoryLogStore : ILogStore
 {
-    private readonly Queue<LogEntryDto> _entries = new();
+    private readonly Queue<LogEntryDto> _queue = [];
     private readonly object _lock = new();
     private const int MaxEntries = 500;
-
-    private static readonly string LogDir  = Path.Combine(AppContext.BaseDirectory, "Logs");
-    private static string LogFile => Path.Combine(LogDir, $"heartbeat_{DateTime.Now:yyyyMMdd}.txt");
 
     public void Add(LogEntryDto entry)
     {
         lock (_lock)
         {
-            if (_entries.Count >= MaxEntries) _entries.Dequeue();
-            _entries.Enqueue(entry);
-
-            try
-            {
-                Directory.CreateDirectory(LogDir);
-                File.AppendAllText(LogFile,
-                    $"[{entry.Timestamp:yyyy-MM-dd HH:mm:ss}] [{entry.Level,-11}] [{entry.Category,-6}] {entry.Message}{Environment.NewLine}");
-            }
-            catch { /* never crash the service over a log write failure */ }
+            if (_queue.Count >= MaxEntries) _queue.Dequeue();
+            _queue.Enqueue(entry);
         }
     }
 
     public IReadOnlyList<LogEntryDto> GetRecent(int count = 200)
     {
         lock (_lock)
-            return _entries.TakeLast(count).Reverse().ToList();
+            return _queue.TakeLast(count).Reverse().ToList();
     }
 }

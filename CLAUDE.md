@@ -24,7 +24,7 @@ dotnet publish HeartBeatProject.server/HeartBeatProject.server.csproj -c Release
 ```
 
 **Default URLs after `dotnet run` on the server:**
-- HTTP: http://localhost:5295
+- HTTP: http://localhost:5000 (from `appsettings.json` `"Urls"`)
 - HTTPS: https://localhost:7266 (launches to `/dashboard` by default)
 - Swagger UI: https://localhost:7266/swagger (development only)
 
@@ -40,11 +40,11 @@ Three projects in one solution:
 
 ### `HeartBeatProject.server` (Server — ASP.NET Core)
 - Hosts Blazor WASM via `UseBlazorFrameworkFiles()` + `MapFallbackToFile("index.html")`
-- `Controllers/HeartbeatController.cs` exposes the real API (see below)
-- Two background services: `HeartbeatTxService` and `HeartbeatRxService` — only the one matching the configured mode is registered in `Program.cs`
-- `Services/RuntimeSettingsStore.cs` — lock-based thread-safe in-memory store, initialized from `appsettings.json`, updated by `POST /api/settings`
-- Custom logging: all `ILogger` output flows through `InMemoryLoggerProvider` → `InMemoryLogStore` (circular queue, max 500 entries, lock-based) and also writes to `{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt` (daily rotation). Only `Information` and above are captured.
-- Log category mapping: TxService→"TX", RxService→"RX", AlertService→"Email", everything else→"System"
+- `Controllers/HeartbeatController.cs` — thin controller; file-system status logic lives in `Services/HeartbeatStatusService.cs` (registered as `IHeartbeatStatusService`)
+- Two background services: `HeartbeatTxService` and `HeartbeatRxService` — each guards itself with a mode check at startup and exits early if the mode doesn't match
+- `Services/RuntimeSettingsStore.cs` — lock-based thread-safe in-memory store, initialized from `appsettings.json`, updated by `POST /api/settings`; `Update()` validates and deep-copies the incoming DTO
+- **Logging**: NLog (`NLog.Web.AspNetCore`) drives all output. `nlog.config` configures a daily-rolling file target (`{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt`, 30-day archive) and a colored console target. A custom `Logging/InMemoryNLogTarget.cs` feeds `ILogStore` for the dashboard `/api/logs` endpoint. Category mapping: TxService→"TX", RxService→"RX", AlertService→"Email", everything else→"System".
+- `nlog.config` must sit beside the executable at runtime (`CopyToOutputDirectory=Always`)
 - Published as a self-contained `win-x64` single-file executable (see `.csproj`)
 
 ### `HeartBeatProject.shared` (Shared Library)
@@ -55,14 +55,16 @@ Three projects in one solution:
 ```
 TX mode:  HeartbeatTxService ──(every IntervalSeconds)──> IHeartbeatFileGenerator.GenerateAsync()
                                                            └─> writes heartbeat_{YYYYMMDD_HHmmss}.txt to FolderPath
+                                                           └─> alert on first failure; re-alert every 5 min while still failing
+                                                           └─> recovery alert on next success
 
-RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath for .txt files
-                                                                └─> HEALTHY if latest file age < ThresholdSeconds
-                                                                └─> DOWN + alert on HEALTHY→DOWN transition only
-                                                                    (5-minute cooldown between repeated alerts)
+RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath for latest .txt file
+                                                                └─> HEALTHY if file age < ThresholdSeconds
+                                                                └─> alert on HEALTHY→DOWN; re-alert every 5 min while still DOWN
+                                                                └─> recovery alert on DOWN→HEALTHY
 ```
 
-TX alerts on first failure only, then again on recovery. Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP).
+Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP). All timestamps use `DateTime.UtcNow`; file ages use `LastWriteTimeUtc`.
 
 ## API Endpoints (`/api/`)
 
@@ -70,7 +72,7 @@ TX alerts on first failure only, then again on recovery. Alerts are sent via `IA
 |--------|------|-------------|
 | GET | `/api/status` | Returns `StatusDto` (mode, status, lastHeartbeat, uptime, intervalSeconds) |
 | GET | `/api/settings` | Returns current `SettingsDto` |
-| POST | `/api/settings` | Updates `RuntimeSettingsStore` with new `SettingsDto` |
+| POST | `/api/settings` | Validates and updates `RuntimeSettingsStore`; returns `400` on invalid input |
 | GET | `/api/logs` | Returns last 200 `LogEntryDto` entries |
 
 ## Configuration (`appsettings.json`)
@@ -109,5 +111,5 @@ Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — 
 - Thread-safety: `RuntimeSettingsStore` and `InMemoryLogStore` use `lock`; `HeartbeatRxService` uses a `volatile` flag for HEALTHY/DOWN state
 - New alert providers: implement `IAlertService` and register in `Program.cs`
 - New Blazor pages: add to `HeartBeatProject/Pages/` with `@page "/route"` and link from `Layout/NavMenu.razor`
-- New API endpoints: add to `HeartBeatProject.server/Controllers/`
+- New API endpoints: add to `HeartBeatProject.server/Controllers/`; business logic goes in a new service under `Services/`, not in the controller
 - Shared data models: add to `HeartBeatProject.shared/Dtos/`

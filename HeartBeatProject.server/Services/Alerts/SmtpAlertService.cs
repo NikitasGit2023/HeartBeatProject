@@ -42,11 +42,11 @@ public sealed class SmtpAlertService : IAlertService
 
             await client.SendMailAsync(mail, cancellationToken);
 
-            _logger.LogInformation("[{Time}] Alert email sent: {Subject}", DateTime.Now, subject);
+            _logger.LogInformation("Alert email sent. Subject: {Subject}", subject);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "[{Time}] Failed to send alert email: {Subject}", DateTime.Now, subject);
+            _logger.LogError(ex, "Failed to send alert email: {Subject}", subject);
         }
     }
 }

@@ -4,24 +4,36 @@ using HeartBeatProject.server.Logging;
 using HeartBeatProject.server.Services;
 using HeartBeatProject.server.Services.Alerts;
 using Microsoft.AspNetCore.Components.WebAssembly.Server;
+using NLog;
+using NLog.Web;
+
+//// Logging — configure NLog before the host is built
+var logStore = new InMemoryLogStore();
+var nlogConfigPath = Path.Combine(AppContext.BaseDirectory, "nlog.config");
+LogManager.Setup().LoadConfigurationFromFile(nlogConfigPath);
+
+var dashboardTarget = new InMemoryNLogTarget(logStore);
+LogManager.Configuration.AddTarget(dashboardTarget);
+LogManager.Configuration.AddRule(NLog.LogLevel.Info, NLog.LogLevel.Fatal, dashboardTarget, "*");
+LogManager.ReconfigExistingLoggers();
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
 
 //// Options
 builder.Services.Configure<HeartbeatOptions>(builder.Configuration.GetSection(HeartbeatOptions.Section));
 builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection(AlertOptions.Section));
 
-//// In-memory log store — created early so the provider can be wired before DI build
-var logStore = new InMemoryLogStore();
 builder.Services.AddSingleton<ILogStore>(logStore);
-builder.Logging.ClearProviders();
-builder.Logging.SetMinimumLevel(LogLevel.Information);
-builder.Logging.AddProvider(new InMemoryLoggerProvider(logStore));
 
 //// Services
 builder.Services.AddSingleton<RuntimeSettingsStore>();
+builder.Services.AddSingleton<IHeartbeatStatusService, HeartbeatStatusService>();
 builder.Services.AddSingleton<IHeartbeatFileGenerator, HeartbeatFileGenerator>();
-builder.Services.AddSingleton<IAlertService, SmtpAlertService>();
+builder.Services.AddSingleton<SmtpAlertService>();
+builder.Services.AddSingleton<ISnmpTrapSender, SnmpTrapSender>();
+builder.Services.AddSingleton<IAlertService, CompositeAlertService>();
 builder.Services.AddHostedService<HeartbeatTxService>();
 builder.Services.AddHostedService<HeartbeatRxService>();
 

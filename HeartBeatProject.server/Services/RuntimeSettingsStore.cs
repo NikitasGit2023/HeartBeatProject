@@ -27,7 +27,45 @@ public sealed class RuntimeSettingsStore
         };
     }
 
-    //Write and read to file are thread safe, that why use lock is neccesary.
-    public SettingsDto Get() { lock (_lock) return _current; }
-    public void Update(SettingsDto dto) { lock (_lock) _current = dto; }
+    public SettingsDto Get()
+    {
+        lock (_lock) return Copy(_current);
+    }
+
+    public void Update(SettingsDto dto)
+    {
+        Validate(dto);
+        lock (_lock) _current = Copy(dto);
+    }
+
+    private static void Validate(SettingsDto dto)
+    {
+        if (string.IsNullOrWhiteSpace(dto.FolderPath))
+            throw new ArgumentException("FolderPath must not be empty.", nameof(dto));
+
+        if (dto.IntervalSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(dto), "IntervalSeconds must be greater than 0.");
+
+        if (dto.CheckIntervalSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(dto), "CheckIntervalSeconds must be greater than 0.");
+
+        if (dto.ThresholdSeconds <= 0)
+            throw new ArgumentOutOfRangeException(nameof(dto), "ThresholdSeconds must be greater than 0.");
+
+        if (dto.Port is < 1 or > 65535)
+            throw new ArgumentOutOfRangeException(nameof(dto), "Port must be between 1 and 65535.");
+    }
+
+    private static SettingsDto Copy(SettingsDto src) => new()
+    {
+        FolderPath           = src.FolderPath,
+        IntervalSeconds      = src.IntervalSeconds,
+        CheckIntervalSeconds = src.CheckIntervalSeconds,
+        ThresholdSeconds     = src.ThresholdSeconds,
+        EnableEmail          = src.EnableEmail,
+        SmtpServer           = src.SmtpServer,
+        Port                 = src.Port,
+        From                 = src.From,
+        To                   = src.To
+    };
 }
