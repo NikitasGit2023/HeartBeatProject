@@ -19,4 +19,10 @@ public sealed class AlertOptions
     public string SnmpHost    { get; init; } = string.Empty;
     public int    SnmpPort    { get; init; } = 162;
     public string Community   { get; init; } = "public";
+
+    // Syslog (RFC 5424, UDP)
+    public bool   EnableSyslog   { get; init; }
+    public string SyslogHost     { get; init; } = string.Empty;
+    public int    SyslogPort     { get; init; } = 514;
+    public string SyslogFacility { get; init; } = "Local0";
 }

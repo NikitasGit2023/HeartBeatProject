@@ -1,52 +1,125 @@
+using System.Net;
 using System.Net.Mail;
-using HeartBeatProject.server.Configuration;
-using Microsoft.Extensions.Options;
+using HeartBeatProject.Shared.Dtos;
 
 namespace HeartBeatProject.server.Services.Alerts;
 
 public sealed class SmtpAlertService : IAlertService
 {
+    private const int MaxAttempts  = 3;
+    private const int RetryDelayMs = 2_000;
+    private const int TimeoutMs    = 15_000;
+
     private readonly ILogger<SmtpAlertService> _logger;
-    private readonly AlertOptions _options;
+    private readonly RuntimeSettingsStore _settingsStore;
 
-    public SmtpAlertService(IOptions<AlertOptions> options, ILogger<SmtpAlertService> logger)
+    public SmtpAlertService(RuntimeSettingsStore settingsStore, ILogger<SmtpAlertService> logger)
     {
-        _logger  = logger;
-        _options = options.Value;
+        _settingsStore = settingsStore;
+        _logger        = logger;
     }
-
-    private bool HasFullCredentials =>
-        _options.EnableEmail &&
-        !string.IsNullOrWhiteSpace(_options.SmtpServer) &&
-        _options.Port > 0 &&
-        !string.IsNullOrWhiteSpace(_options.From) &&
-        !string.IsNullOrWhiteSpace(_options.To);
 
     public async Task SendAlertAsync(string subject, string message, CancellationToken cancellationToken = default)
     {
-        if (!HasFullCredentials)
+        var opts = _settingsStore.Get();
+
+        if (!IsConfigured(opts))
         {
-            _logger.LogWarning("Email alert skipped: incomplete SMTP configuration.");
+            LogSkipped(opts);
             return;
         }
 
-        try
+        for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
-            using var client = new SmtpClient(_options.SmtpServer, _options.Port);
-            client.EnableSsl = _options.EnableSsl;
+            try
+            {
+                using var client = BuildClient(opts);
+                using var mail   = BuildMessage(opts, subject, message);
 
-            if (!string.IsNullOrEmpty(_options.Username))
-                client.Credentials = new System.Net.NetworkCredential(_options.Username, _options.Password);
+                await client.SendMailAsync(mail, cancellationToken);
 
-            using var mail = new MailMessage(_options.From, _options.To, subject, message);
+                _logger.LogInformation(
+                    "Alert email sent (attempt {Attempt}/{Max}). Subject: {Subject}",
+                    attempt, MaxAttempts, subject);
+                return;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                if (attempt == MaxAttempts)
+                {
+                    _logger.LogError(ex,
+                        "Failed to send alert email after {Attempts} attempts. Subject: {Subject}",
+                        MaxAttempts, subject);
+                    return;
+                }
 
-            await client.SendMailAsync(mail, cancellationToken);
+                _logger.LogWarning(ex,
+                    "Email send attempt {Attempt}/{Max} failed — retrying in {Delay}ms. Subject: {Subject}",
+                    attempt, MaxAttempts, RetryDelayMs, subject);
 
-            _logger.LogInformation("Alert email sent. Subject: {Subject}", subject);
+                await Task.Delay(RetryDelayMs, cancellationToken);
+            }
         }
-        catch (Exception ex)
+    }
+
+    // ── Helpers ────────────────────────────────────────────────────────────
+
+    private static bool IsConfigured(SettingsDto opts) =>
+        opts.EnableEmail &&
+        !string.IsNullOrWhiteSpace(opts.SmtpServer) &&
+        opts.Port > 0 &&
+        !string.IsNullOrWhiteSpace(opts.From) &&
+        !string.IsNullOrWhiteSpace(opts.To);
+
+    private void LogSkipped(SettingsDto opts)
+    {
+        if (!opts.EnableEmail)
+            _logger.LogWarning("Email alert skipped — EnableEmail is false.");
+        else if (string.IsNullOrWhiteSpace(opts.SmtpServer))
+            _logger.LogWarning("Email alert skipped — SmtpServer is not configured.");
+        else if (opts.Port <= 0)
+            _logger.LogWarning("Email alert skipped — Port is invalid ({Port}).", opts.Port);
+        else if (string.IsNullOrWhiteSpace(opts.From))
+            _logger.LogWarning("Email alert skipped — From address is not configured.");
+        else
+            _logger.LogWarning("Email alert skipped — To address is not configured.");
+    }
+
+    private static SmtpClient BuildClient(SettingsDto opts)
+    {
+        var client = new SmtpClient(opts.SmtpServer, opts.Port)
         {
-            _logger.LogError(ex, "Failed to send alert email: {Subject}", subject);
+            DeliveryMethod = SmtpDeliveryMethod.Network,
+            EnableSsl      = opts.EnableSsl,
+            Timeout        = TimeoutMs,
+        };
+
+        if (!string.IsNullOrEmpty(opts.Username))
+            client.Credentials = new NetworkCredential(opts.Username, opts.Password);
+
+        return client;
+    }
+
+    // Supports semicolon- or comma-separated To addresses.
+    private static MailMessage BuildMessage(SettingsDto opts, string subject, string body)
+    {
+        var mail = new MailMessage
+        {
+            From    = new MailAddress(opts.From),
+            Subject = subject,
+            Body    = body,
+        };
+
+        foreach (var addr in opts.To.Split(new[] { ';', ',' },
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            mail.To.Add(new MailAddress(addr));
         }
+
+        return mail;
     }
 }

@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**HeartBeatProject** is a full-stack .NET 8 application that monitors health by writing and reading timestamped "heartbeat" files. It supports two modes:
+**HeartBeatProject** is a full-stack .NET 8 application that monitors health by writing and reading timestamped "heartbeat" files. A single binary is deployed twice — once as TX, once as RX — each with its own `appsettings.json`.
+
 - **TX (Transmitter)** — writes heartbeat files at a configured interval
-- **RX (Receiver)** — monitors a folder for heartbeat files and transitions to DOWN state when the latest file exceeds a threshold age
+- **RX (Receiver)** — monitors a folder for heartbeat files; alerts when the latest file exceeds a threshold age
 
 Solution file: `HeartBeatProject/HeartBeatProject.slnx`
 
@@ -16,100 +17,141 @@ Solution file: `HeartBeatProject/HeartBeatProject.slnx`
 # Build entire solution
 dotnet build HeartBeatProject/HeartBeatProject.slnx
 
-# Run the server (serves both API and Blazor WASM client)
+# Run the server
 dotnet run --project HeartBeatProject.server/HeartBeatProject.server.csproj
 
-# Publish server as self-contained single-file executable (win-x64)
+# Publish as self-contained single-file executable (win-x64)
 dotnet publish HeartBeatProject.server/HeartBeatProject.server.csproj -c Release
 ```
 
-**Default URLs after `dotnet run` on the server:**
-- HTTP: http://localhost:5000 (from `appsettings.json` `"Urls"`)
-- HTTPS: https://localhost:7266 (launches to `/dashboard` by default)
-- Swagger UI: https://localhost:7266/swagger (development only)
+**Default URL:** `http://localhost:5000` (set via `"Urls"` in `appsettings.json`).  
+TX and RX installations use different ports (e.g. 5000 / 5001) when co-located on the same machine.
 
 ## Architecture
 
 Three projects in one solution:
 
 ### `HeartBeatProject` (Client — Blazor WebAssembly)
-- `HttpClient` is pre-injected with the server base address
-- Client-side polling: Dashboard every 3 s (plus a 1 s countdown timer for smooth UX), Logs every 2 s, Settings loaded once on init
-- Three pages: `Pages/Dashboard.razor`, `Pages/Settings.razor`, `Pages/Logs.razor`
-- Shared CSS animations (spin, pulse-green, pulse-red, pulse-live) live in `wwwroot/css/app.css`
+- `HttpClient` pre-injected with the server base address
+- Client-side polling: Dashboard every 3 s (+ 1 s countdown), Logs every 2 s, Settings once on init
+- Pages: `Dashboard.razor`, `Settings.razor`, `Logs.razor`
+- CSS animations (spin, pulse-green, pulse-red, pulse-live) in `wwwroot/css/app.css`
 
 ### `HeartBeatProject.server` (Server — ASP.NET Core)
 - Hosts Blazor WASM via `UseBlazorFrameworkFiles()` + `MapFallbackToFile("index.html")`
-- `Controllers/HeartbeatController.cs` — thin controller; file-system status logic lives in `Services/HeartbeatStatusService.cs` (registered as `IHeartbeatStatusService`)
-- Two background services: `HeartbeatTxService` and `HeartbeatRxService` — each guards itself with a mode check at startup and exits early if the mode doesn't match
-- `Services/RuntimeSettingsStore.cs` — lock-based thread-safe in-memory store, initialized from `appsettings.json`, updated by `POST /api/settings`; `Update()` validates and deep-copies the incoming DTO
-- **Logging**: NLog (`NLog.Web.AspNetCore`) drives all output. `nlog.config` configures a daily-rolling file target (`{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt`, 30-day archive) and a colored console target. A custom `Logging/InMemoryNLogTarget.cs` feeds `ILogStore` for the dashboard `/api/logs` endpoint. Category mapping: TxService→"TX", RxService→"RX", AlertService→"Email", everything else→"System".
-- `nlog.config` must sit beside the executable at runtime (`CopyToOutputDirectory=Always`)
-- Published as a self-contained `win-x64` single-file executable (see `.csproj`)
+- `appsettings.json` content root is forced to `AppContext.BaseDirectory` via `builder.Host.UseContentRoot(...)` — required for Windows Service deployments
+- **Mode routing**: `Heartbeat:Mode` is validated at startup before NLog is initialised. An invalid mode throws `InvalidOperationException` immediately. Only the matching `BackgroundService` is registered in DI — `HeartbeatTxService` for TX, `HeartbeatRxService` for RX. Neither service contains a mode guard.
+- **Controller**: `HeartbeatController` is thin. All business logic is in services. `GET /api/settings` masks the SMTP password as `"********"`; `POST /api/settings` preserves the existing password if the client echoes the mask back.
+- **RuntimeSettingsStore**: lock-based thread-safe in-memory store. `Get()` and `Update()` both deep-copy the DTO. `Update()` validates all fields including port ranges, email format (`System.Net.Mail.MailAddress`), and blocks port 465 with `EnableSsl` (not supported by `System.Net.Mail`).
 
 ### `HeartBeatProject.shared` (Shared Library)
-- DTOs used by both client and server: `StatusDto`, `SettingsDto`, `LogEntryDto`
+- DTOs shared by client and server: `StatusDto`, `SettingsDto`, `LogEntryDto`
 
 ## Heartbeat Flow
 
 ```
-TX mode:  HeartbeatTxService ──(every IntervalSeconds)──> IHeartbeatFileGenerator.GenerateAsync()
-                                                           └─> writes heartbeat_{YYYYMMDD_HHmmss}.txt to FolderPath
-                                                           └─> alert on first failure; re-alert every 5 min while still failing
-                                                           └─> recovery alert on next success
+TX:  HeartbeatTxService ──(every IntervalSeconds)──► IHeartbeatFileGenerator.GenerateAsync()
+       OverwriteExisting=true  → writes heartbeat_latest.txt (single file, always fresh)
+       OverwriteExisting=false → writes heartbeat_YYYYMMDD_HHmmss.txt (accumulating)
+       Alert on first failure; re-alert every 5 min; recovery alert on next success.
 
-RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath for latest .txt file
-                                                                └─> HEALTHY if file age < ThresholdSeconds
-                                                                └─> alert on HEALTHY→DOWN; re-alert every 5 min while still DOWN
-                                                                └─> recovery alert on DOWN→HEALTHY
+RX:  HeartbeatRxService ──(every CheckIntervalSeconds)──► scans FolderPath for latest *.txt
+       HEALTHY if file age ≤ ThresholdSeconds
+       Alert on HEALTHY→DOWN; re-alert every 5 min; recovery alert on DOWN→HEALTHY.
+       Watchdog covers: folder missing, no files, stale file.
 ```
 
-Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP). All timestamps use `DateTime.UtcNow`; file ages use `LastWriteTimeUtc`.
+All timestamps use `DateTime.UtcNow`; file ages use `LastWriteTimeUtc`.  
+Alert cooldown uses `DateTime.MinValue` as initial `_lastAlertTime` so the first event always fires immediately.
 
-## API Endpoints (`/api/`)
+## Alert Pipeline
+
+Alerts flow through `CompositeAlertService` which fires all three providers in parallel via `Task.WhenAll`:
+
+```
+IAlertService (CompositeAlertService)
+  ├─ SmtpAlertService    → System.Net.Mail, 3 retries (2 s delay), 15 s timeout
+  ├─ SnmpTrapSender      → Lextm.SharpSnmpLib 12.5.7, SNMPv2c trap, enterprise OID 1.3.6.1.4.1.99999
+  └─ SyslogSender        → NLog.Targets.Syslog 7.0.0 via dedicated "SyslogAlert" NLog logger
+```
+
+Each provider reads **live settings** from `RuntimeSettingsStore` on every call, so alert config changes via `POST /api/settings` take effect immediately without restart.  
+Each provider skips gracefully with a `LogWarning` if its `Enable*` flag is false or required fields are empty.
+
+## Logging
+
+NLog (`NLog.Web.AspNetCore`) drives all output:
+- **File target**: daily-rolling `{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt`, 30-day archive
+- **Console target**: coloured
+- **Dashboard target**: `InMemoryNLogTarget` (custom `TargetWithLayout`) feeds `ILogStore` → `GET /api/logs`. Registered programmatically after `nlog.config` is loaded, not in XML.
+- **Syslog target**: `NLog.Targets.Syslog`, routed only from the `"SyslogAlert"` logger (`final="true"` prevents duplication to file/console). `Server` is a Layout (`${gdc:item=SyslogHost}`); `Port` and `Facility` are set programmatically in `Program.cs` after config load.
+
+`nlog.config` must sit beside the executable (`CopyToOutputDirectory=Always`). NLog and Syslog GDC vars are configured before `WebApplication.CreateBuilder` using an early `ConfigurationBuilder` seeded from `AppContext.BaseDirectory`.
+
+## API Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| GET | `/api/status` | Returns `StatusDto` (mode, status, lastHeartbeat, uptime, intervalSeconds) |
-| GET | `/api/settings` | Returns current `SettingsDto` |
-| POST | `/api/settings` | Validates and updates `RuntimeSettingsStore`; returns `400` on invalid input |
-| GET | `/api/logs` | Returns last 200 `LogEntryDto` entries |
+| GET | `/api/status` | `StatusDto` — mode, status, lastHeartbeat, uptime, intervalSeconds (CheckInterval in RX mode) |
+| GET | `/api/settings` | `SettingsDto` with password masked as `"********"` |
+| POST | `/api/settings` | Validates and updates `RuntimeSettingsStore`; `400` on invalid input |
+| GET | `/api/logs` | Last 500 `LogEntryDto` entries |
 
-## Configuration (`appsettings.json`)
+## Configuration
+
+Full `appsettings.json` schema — all fields are required in each installation:
 
 ```json
 {
+  "Urls": "http://localhost:5000",
   "Heartbeat": {
-    "Mode": "TX",               // "TX" or "RX"
-    "FolderPath": "...",
+    "Mode": "TX",
+    "FolderPath": "C:\\Heartbeat\\Shared\\HeartbeatFiles",
     "FileNamePrefix": "heartbeat",
-    "IntervalSeconds": 30,      // TX: write interval
+    "IntervalSeconds": 30,
     "OverwriteExisting": true,
-    "LogFolderPath": "...",
-    "CheckIntervalSeconds": 10, // RX: scan interval
-    "ThresholdSeconds": 60      // RX: age before DOWN
+    "LogFolderPath": "",
+    "CheckIntervalSeconds": 10,
+    "ThresholdSeconds": 60
   },
   "Alerts": {
     "EnableEmail": false,
-    "SmtpServer": "",
-    "Port": 587,
-    "From": "",
-    "To": "",
-    "Username": "",
-    "Password": "",
-    "EnableSsl": true
+    "SmtpServer": "", "Port": 587, "From": "", "To": "",
+    "Username": "", "Password": "", "EnableSsl": true,
+    "EnableSnmp": false,
+    "SnmpHost": "", "SnmpPort": 162, "Community": "public",
+    "EnableSyslog": false,
+    "SyslogHost": "", "SyslogPort": 514, "SyslogFacility": "Local0"
   }
 }
 ```
 
-Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — they do not persist to `appsettings.json`.
+`SyslogFacility` valid values: `Kernel`, `User`, `Daemons`, `Local0`–`Local7`.  
+Port 465 + `EnableSsl: true` is rejected at validation time — use port 587 (STARTTLS).  
+`To` supports semicolon- or comma-separated addresses.  
+Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — do not persist to disk.
+
+## Deployment
+
+```
+C:\Heartbeat\
+├── TX\   → HeartBeatProject.server.exe + nlog.config + appsettings.json (Mode=TX, Urls=:5000)
+├── RX\   → HeartBeatProject.server.exe + nlog.config + appsettings.json (Mode=RX, Urls=:5001)
+└── Shared\HeartbeatFiles\   ← TX writes here, RX reads here
+```
+
+Register as Windows Services:
+```
+sc create HeartbeatTX binPath="C:\Heartbeat\TX\HeartBeatProject.server.exe" start=auto
+sc create HeartbeatRX binPath="C:\Heartbeat\RX\HeartBeatProject.server.exe" start=auto
+```
 
 ## Key Conventions
 
 - Nullable reference types enabled across all projects
-- All background service loops use `CancellationToken`; services swallow all exceptions except `OperationCanceledException`
-- Thread-safety: `RuntimeSettingsStore` and `InMemoryLogStore` use `lock`; `HeartbeatRxService` uses a `volatile` flag for HEALTHY/DOWN state
-- New alert providers: implement `IAlertService` and register in `Program.cs`
-- New Blazor pages: add to `HeartBeatProject/Pages/` with `@page "/route"` and link from `Layout/NavMenu.razor`
-- New API endpoints: add to `HeartBeatProject.server/Controllers/`; business logic goes in a new service under `Services/`, not in the controller
-- Shared data models: add to `HeartBeatProject.shared/Dtos/`
+- All background service loops use `CancellationToken`; swallow all exceptions except `OperationCanceledException`
+- Thread-safety: `RuntimeSettingsStore` and `InMemoryLogStore` use `lock`; `HeartbeatRxService` uses `volatile bool` for HEALTHY/DOWN state
+- New alert providers: implement `IAlertService`, add to `CompositeAlertService`, register in `Program.cs`
+- New Blazor pages: add to `HeartBeatProject/Pages/` with `@page "/route"`, link from `Layout/NavMenu.razor`
+- New API endpoints: add to `Controllers/`; business logic in a new `Services/` class
+- New shared DTOs: add to `HeartBeatProject.shared/Dtos/`

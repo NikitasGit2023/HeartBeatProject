@@ -23,25 +23,21 @@ public sealed class HeartbeatFileGenerator : IHeartbeatFileGenerator
 
     public async Task GenerateAsync(CancellationToken cancellationToken = default)
     {
-        var folderPath = _settingsStore.Get().FolderPath;
+        var settings   = _settingsStore.Get();
+        var folderPath = settings.FolderPath;
 
-        //creating directory if not existed inside user system
         Directory.CreateDirectory(folderPath);
 
-        var fileName = $"{_staticOptions.FileNamePrefix}_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+        // OverwriteExisting=true  → single fixed file (RX always sees the freshest write time)
+        // OverwriteExisting=false → timestamped file per cycle (accumulates; RX picks latest by LastWriteTimeUtc)
+        var fileName = settings.OverwriteExisting
+            ? $"{_staticOptions.FileNamePrefix}_latest.txt"
+            : $"{_staticOptions.FileNamePrefix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.txt";
+
         var filePath = Path.Combine(folderPath, fileName);
 
-        // used for disable generating the same file twice
-        if (!_staticOptions.OverwriteExisting && File.Exists(filePath))
-        {
-            _logger.LogInformation("[{Time}] Heartbeat skipped — file already exists: {File}",
-                DateTime.Now, fileName);
-            return;
-        }
-
-        // writing to file
         await File.WriteAllTextAsync(filePath, "alive", cancellationToken);
 
-        _logger.LogInformation("[{Time}] Heartbeat written: {File}", DateTime.Now, fileName);
+        _logger.LogInformation("Heartbeat written: {File}", fileName);
     }
 }

@@ -1,6 +1,4 @@
-using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Services.Alerts;
-using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services;
 
@@ -10,13 +8,11 @@ public sealed class HeartbeatTxService : BackgroundService
     private readonly IHeartbeatFileGenerator _fileGenerator;
     private readonly IAlertService _alertService;
     private readonly RuntimeSettingsStore _settingsStore;
-    private readonly HeartbeatOptions _staticOptions;
     private readonly TimeSpan _alertCooldown = TimeSpan.FromMinutes(5);
     private bool _lastWasSuccess = true;
     private DateTime _lastAlertTime = DateTime.MinValue;
 
     public HeartbeatTxService(
-        IOptions<HeartbeatOptions> options,
         ILogger<HeartbeatTxService> logger,
         IHeartbeatFileGenerator fileGenerator,
         IAlertService alertService,
@@ -26,18 +22,12 @@ public sealed class HeartbeatTxService : BackgroundService
         _fileGenerator = fileGenerator;
         _alertService  = alertService;
         _settingsStore = settingsStore;
-        _staticOptions = options.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_staticOptions.Mode.Equals("TX", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("HeartbeatTxService skipped — configured mode is {Mode}.", _staticOptions.Mode);
-            return;
-        }
-
-        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s", _staticOptions.IntervalSeconds);
+        _logger.LogInformation("HeartbeatTxService started. Interval: {Interval}s",
+            _settingsStore.Get().IntervalSeconds);
 
         while (!stoppingToken.IsCancellationRequested)
         {
@@ -63,7 +53,7 @@ public sealed class HeartbeatTxService : BackgroundService
 
         _logger.LogInformation("TX: Status: DOWN \u2192 HEALTHY — heartbeat file generation recovered.");
         _lastWasSuccess = true;
-        _lastAlertTime = DateTime.MinValue;
+        _lastAlertTime  = DateTime.MinValue;
 
         await _alertService.SendAlertAsync(
             "Heartbeat TX \u2014 Recovery",
@@ -83,7 +73,7 @@ public sealed class HeartbeatTxService : BackgroundService
             _logger.LogWarning("TX: Still failing.");
         }
 
-        var now = DateTime.UtcNow;
+        var now     = DateTime.UtcNow;
         var elapsed = now - _lastAlertTime;
 
         if (elapsed < _alertCooldown)
@@ -93,7 +83,7 @@ public sealed class HeartbeatTxService : BackgroundService
             return;
         }
 
-        var folder = _settingsStore.Get().FolderPath;
+        var folder     = _settingsStore.Get().FolderPath;
         _lastAlertTime = now;
         _logger.LogInformation("TX: Sending alert. Folder: {Folder}", folder);
 

@@ -1,6 +1,4 @@
-using HeartBeatProject.server.Configuration;
 using HeartBeatProject.server.Services.Alerts;
-using Microsoft.Extensions.Options;
 
 namespace HeartBeatProject.server.Services;
 
@@ -9,13 +7,11 @@ public sealed class HeartbeatRxService : BackgroundService
     private readonly ILogger<HeartbeatRxService> _logger;
     private readonly IAlertService _alertService;
     private readonly RuntimeSettingsStore _settingsStore;
-    private readonly HeartbeatOptions _staticOptions;
     private readonly TimeSpan _alertCooldown = TimeSpan.FromMinutes(5);
     private volatile bool _isHealthy = true;
     private DateTime _lastAlertTime = DateTime.MinValue;
 
     public HeartbeatRxService(
-        IOptions<HeartbeatOptions> options,
         ILogger<HeartbeatRxService> logger,
         IAlertService alertService,
         RuntimeSettingsStore settingsStore)
@@ -23,17 +19,10 @@ public sealed class HeartbeatRxService : BackgroundService
         _logger        = logger;
         _alertService  = alertService;
         _settingsStore = settingsStore;
-        _staticOptions = options.Value;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        if (!_staticOptions.Mode.Equals("RX", StringComparison.OrdinalIgnoreCase))
-        {
-            _logger.LogInformation("HeartbeatRxService skipped — configured mode is {Mode}.", _staticOptions.Mode);
-            return;
-        }
-
         var initial = _settingsStore.Get();
         _logger.LogInformation(
             "HeartbeatRxService started. Folder: {Folder}, Threshold: {Threshold}s, Check interval: {Interval}s",
@@ -41,7 +30,7 @@ public sealed class HeartbeatRxService : BackgroundService
 
         while (!stoppingToken.IsCancellationRequested)
         {
-            _logger.LogInformation("RX: Monitoring cycle started");
+            _logger.LogDebug("RX: Monitoring cycle started");
             try
             {
                 await CheckAsync(stoppingToken);
@@ -122,7 +111,7 @@ public sealed class HeartbeatRxService : BackgroundService
             _logger.LogWarning("RX: Still DOWN.");
         }
 
-        var now = DateTime.UtcNow;
+        var now     = DateTime.UtcNow;
         var elapsed = now - _lastAlertTime;
 
         if (elapsed < _alertCooldown)
@@ -142,7 +131,7 @@ public sealed class HeartbeatRxService : BackgroundService
         if (_isHealthy) return;
 
         _logger.LogInformation("RX: Status: DOWN \u2192 HEALTHY");
-        _isHealthy = true;
+        _isHealthy     = true;
         _lastAlertTime = DateTime.MinValue;
 
         await _alertService.SendAlertAsync(

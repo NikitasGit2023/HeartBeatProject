@@ -9,6 +9,8 @@ namespace HeartBeatProject.server.Controllers;
 [Route("api")]
 public sealed class HeartbeatController : ControllerBase
 {
+    private const string PasswordMask = "********";
+
     private readonly IHeartbeatStatusService _statusService;
     private readonly RuntimeSettingsStore _settingsStore;
     private readonly ILogStore _logStore;
@@ -30,11 +32,25 @@ public sealed class HeartbeatController : ControllerBase
     public ActionResult<StatusDto> GetStatus() => Ok(_statusService.GetStatus());
 
     [HttpGet("settings")]
-    public ActionResult<SettingsDto> GetSettings() => Ok(_settingsStore.Get());
+    public ActionResult<SettingsDto> GetSettings()
+    {
+        var dto = _settingsStore.Get();
+
+        // Never return the real password over the API.
+        if (!string.IsNullOrEmpty(dto.Password))
+            dto.Password = PasswordMask;
+
+        return Ok(dto);
+    }
 
     [HttpPost("settings")]
     public IActionResult UpdateSettings([FromBody] SettingsDto dto)
     {
+        // If the client echoed back the mask placeholder, keep the existing stored password
+        // so the user doesn't need to re-enter it on every settings save.
+        if (dto.Password == PasswordMask)
+            dto.Password = _settingsStore.Get().Password;
+
         try
         {
             _settingsStore.Update(dto);

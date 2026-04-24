@@ -60,7 +60,9 @@ public sealed class HeartbeatStatusService : IHeartbeatStatusService
             Status          = status,
             LastHeartbeat   = lastHeartbeat,
             Uptime          = DateTime.UtcNow - _startTime,
-            IntervalSeconds = settings.IntervalSeconds
+            IntervalSeconds = _heartbeatOptions.Value.Mode.Equals("RX", StringComparison.OrdinalIgnoreCase)
+                ? settings.CheckIntervalSeconds
+                : settings.IntervalSeconds
         };
     }
 }
