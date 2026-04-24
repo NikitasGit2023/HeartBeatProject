@@ -19,9 +19,6 @@ dotnet build HeartBeatProject/HeartBeatProject.slnx
 # Run the server (serves both API and Blazor WASM client)
 dotnet run --project HeartBeatProject.server/HeartBeatProject.server.csproj
 
-# Build the WPF installer (Windows only)
-dotnet build HeartBeatProjectInstaller/HeartBeatProjectInstaller.csproj
-
 # Publish server as self-contained single-file executable (win-x64)
 dotnet publish HeartBeatProject.server/HeartBeatProject.server.csproj -c Release
 ```
@@ -33,30 +30,25 @@ dotnet publish HeartBeatProject.server/HeartBeatProject.server.csproj -c Release
 
 ## Architecture
 
-Four projects in one solution:
+Three projects in one solution:
 
 ### `HeartBeatProject` (Client — Blazor WebAssembly)
 - `HttpClient` is pre-injected with the server base address
 - Client-side polling: Dashboard every 3 s (plus a 1 s countdown timer for smooth UX), Logs every 2 s, Settings loaded once on init
-- Three real pages: `Pages/Dashboard.razor`, `Pages/Settings.razor`, `Pages/Logs.razor`
-- Boilerplate pages (`Home.razor`, `Counter.razor`, `Weather.razor`) can be removed
+- Three pages: `Pages/Dashboard.razor`, `Pages/Settings.razor`, `Pages/Logs.razor`
 - Shared CSS animations (spin, pulse-green, pulse-red, pulse-live) live in `wwwroot/css/app.css`
 
 ### `HeartBeatProject.server` (Server — ASP.NET Core)
 - Hosts Blazor WASM via `UseBlazorFrameworkFiles()` + `MapFallbackToFile("index.html")`
-- `Controllers/HeartbeatController.cs` exposes the real API (see below); `WeatherForecastController` is boilerplate
+- `Controllers/HeartbeatController.cs` exposes the real API (see below)
 - Two background services: `HeartbeatTxService` and `HeartbeatRxService` — only the one matching the configured mode is registered in `Program.cs`
 - `Services/RuntimeSettingsStore.cs` — lock-based thread-safe in-memory store, initialized from `appsettings.json`, updated by `POST /api/settings`
 - Custom logging: all `ILogger` output flows through `InMemoryLoggerProvider` → `InMemoryLogStore` (circular queue, max 500 entries, lock-based) and also writes to `{BaseDirectory}/Logs/heartbeat_YYYYMMDD.txt` (daily rotation). Only `Information` and above are captured.
+- Log category mapping: TxService→"TX", RxService→"RX", AlertService→"Email", everything else→"System"
 - Published as a self-contained `win-x64` single-file executable (see `.csproj`)
 
 ### `HeartBeatProject.shared` (Shared Library)
 - DTOs used by both client and server: `StatusDto`, `SettingsDto`, `LogEntryDto`
-
-### `HeartBeatProjectInstaller` (WPF Windows Installer)
-- 4-step wizard: Welcome → Config → Install → Finish
-- `Services/InstallerService.cs` writes `appsettings.json` (merges via `JsonNode`, preserves existing keys) and manages the Windows service via `sc.exe`
-- Targets `net8.0-windows`; see `HeartBeatProjectInstaller/CLAUDE.md` for installer-specific guidance
 
 ## Heartbeat Flow
 
@@ -67,9 +59,10 @@ TX mode:  HeartbeatTxService ──(every IntervalSeconds)──> IHeartbeatFile
 RX mode:  HeartbeatRxService ──(every CheckIntervalSeconds)──> scans FolderPath for .txt files
                                                                 └─> HEALTHY if latest file age < ThresholdSeconds
                                                                 └─> DOWN + alert on HEALTHY→DOWN transition only
+                                                                    (5-minute cooldown between repeated alerts)
 ```
 
-Alerts fire on state transitions only (not repeatedly while down). TX alerts on first failure only, then again on recovery. Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP).
+TX alerts on first failure only, then again on recovery. Alerts are sent via `IAlertService` (SMTP implementation in `SmtpAlertService`). The interface is designed for additional providers (Syslog, SNMP).
 
 ## API Endpoints (`/api/`)
 
@@ -107,7 +100,7 @@ Alerts fire on state transitions only (not repeatedly while down). TX alerts on 
 }
 ```
 
-Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — they do not persist to `appsettings.json`. `appsettings.json` is only written by the installer.
+Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — they do not persist to `appsettings.json`.
 
 ## Key Conventions
 
