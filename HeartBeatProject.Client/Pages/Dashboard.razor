@@ -2,38 +2,45 @@
 @page "/dashboard"
 @implements IDisposable
 @inject HttpClient Http
+@inject AppState AppState
 
 <PageTitle>Dashboard — HeartBeat</PageTitle>
 
 <div class="page-header">
     <h1 class="page-title">Dashboard</h1>
-    <span class="page-subtitle">Real-time heartbeat monitoring</span>
+    <span class="page-subtitle">
+        @if (_status is null) { <text>Connecting...</text> }
+        else { <text>@(_status.Mode == "TX" ? "Transmitter" : "Receiver") monitoring</text> }
+    </span>
 </div>
 
 @if (_status is null)
 {
     <div class="loading-card">
         <div class="spinner"></div>
-        <span>Connecting...</span>
+        <span>Connecting to service...</span>
     </div>
 }
 else
 {
     <div class="stat-grid">
 
-        <div class="stat-card status-card @(_status.Status == "HEALTHY" ? "healthy" : "down")">
+        <div class="stat-card status-card @StatusCss(_status.Status)">
             <div class="stat-label">System Status</div>
             <div class="stat-value status-value">
-                <span class="status-dot @(_status.Status == "HEALTHY" ? "dot-healthy" : "dot-down")"></span>
+                <span class="status-dot @DotCss(_status.Status)"></span>
                 @_status.Status
             </div>
-            <div class="stat-sub">@(_status.Status == "HEALTHY" ? "All systems operational" : "Signal lost")</div>
+            @if (!string.IsNullOrEmpty(_status.Details))
+            {
+                <div class="stat-sub">@_status.Details</div>
+            }
         </div>
 
         <div class="stat-card">
             <div class="stat-label">Mode</div>
             <div class="stat-value">@_status.Mode</div>
-            <div class="stat-sub">@(_status.Mode == "TX" ? "Transmitting" : "Receiving")</div>
+            <div class="stat-sub">@(_status.Mode == "TX" ? "Transmitter" : "Receiver")</div>
         </div>
 
         <div class="stat-card">
@@ -47,7 +54,7 @@ else
     <div class="detail-grid">
 
         <div class="stat-card">
-            <div class="stat-label">Last Heartbeat</div>
+            <div class="stat-label">@(_status.Mode == "TX" ? "Last TX Write" : "Last RX Check")</div>
             @if (_status.LastHeartbeat.HasValue)
             {
                 <div class="stat-value mono">@_status.LastHeartbeat.Value.ToString("HH:mm:ss")</div>
@@ -55,16 +62,16 @@ else
             }
             else
             {
-                <div class="stat-value muted">No signal yet</div>
+                <div class="stat-value muted">No activity yet</div>
                 <div class="stat-sub">—</div>
             }
         </div>
 
         <div class="stat-card countdown-card">
-            <div class="stat-label">Next Action In</div>
+            <div class="stat-label">@(_status.Mode == "TX" ? "Next Write In" : "Next Check In")</div>
             <div class="countdown-number @(_countdown <= 10 ? "countdown-urgent" : "")">@_countdown<span class="countdown-unit">s</span></div>
             <div class="progress-bar-track">
-                <div class="progress-bar-fill @(_countdown <= 10 ? "fill-urgent" : "")"
+                <div class="progress-bar-fill @ProgressCss(_status.Status, _countdown)"
                      style="width: @(Math.Min(100, (double)_countdown / Math.Max(1, _status.IntervalSeconds) * 100))%">
                 </div>
             </div>
@@ -75,8 +82,8 @@ else
 }
 
 <style>
-    .page-header { margin-bottom: 1.75rem; }
-    .page-title  { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .page-header  { margin-bottom: 1.75rem; }
+    .page-title   { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
     .page-subtitle { font-size: 0.875rem; color: #64748b; }
 
     .loading-card { display: flex; align-items: center; gap: 12px; padding: 2rem; background: white; border-radius: 12px; color: #64748b; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
@@ -102,16 +109,23 @@ else
     .mono       { font-family: 'Courier New', monospace; }
     .muted      { color: #94a3b8; }
 
-    .status-card.healthy { border-left: 4px solid #22c55e; }
-    .status-card.down    { border-left: 4px solid #ef4444; }
+    /* Status card accent borders */
+    .status-card.running  { border-left: 4px solid #22c55e; }
+    .status-card.healthy  { border-left: 4px solid #22c55e; }
+    .status-card.error    { border-left: 4px solid #ef4444; }
+    .status-card.down     { border-left: 4px solid #ef4444; }
+    .status-card.degraded { border-left: 4px solid #f59e0b; }
+    .status-card.starting { border-left: 4px solid #94a3b8; }
 
     .status-value { display: flex; align-items: center; }
     .status-dot {
         width: 10px; height: 10px; border-radius: 50%;
         margin-right: 10px; flex-shrink: 0;
     }
-    .dot-healthy { background: #22c55e; animation: pulse-green 2s infinite; }
-    .dot-down    { background: #ef4444; animation: pulse-red   2s infinite; }
+    .dot-running, .dot-healthy { background: #22c55e; animation: pulse-green  2s infinite; }
+    .dot-error,   .dot-down    { background: #ef4444; animation: pulse-red    2s infinite; }
+    .dot-degraded              { background: #f59e0b; animation: pulse-yellow 2s infinite; }
+    .dot-starting              { background: #94a3b8; }
 
     .countdown-card { gap: 8px; }
     .countdown-number { font-size: 2.8rem; font-weight: 800; color: #0f172a; line-height: 1; font-family: 'Courier New', monospace; }
@@ -121,6 +135,7 @@ else
     .progress-bar-track { height: 6px; background: #f1f5f9; border-radius: 99px; overflow: hidden; }
     .progress-bar-fill  { height: 100%; background: #0ea5e9; border-radius: 99px; transition: width 0.5s ease; }
     .fill-urgent        { background: #ef4444; }
+    .fill-degraded      { background: #f59e0b; }
 
     @@media (max-width: 640px) {
         .detail-grid { grid-template-columns: 1fr; }
@@ -164,9 +179,40 @@ else
 
     private async Task RefreshAsync()
     {
-        try { _status = await Http.GetFromJsonAsync<StatusDto>("api/status"); }
+        try
+        {
+            _status = await Http.GetFromJsonAsync<StatusDto>("api/status");
+            if (_status is not null) AppState.SetMode(_status.Mode);
+        }
         catch { }
     }
+
+    private static string StatusCss(string s) => s.ToLowerInvariant() switch
+    {
+        "running"  => "running",
+        "healthy"  => "healthy",
+        "error"    => "error",
+        "down"     => "down",
+        "degraded" => "degraded",
+        _          => "starting",
+    };
+
+    private static string DotCss(string s) => s.ToLowerInvariant() switch
+    {
+        "running"  => "dot-running",
+        "healthy"  => "dot-healthy",
+        "error"    => "dot-error",
+        "down"     => "dot-down",
+        "degraded" => "dot-degraded",
+        _          => "dot-starting",
+    };
+
+    private static string ProgressCss(string s, int cd) => cd > 10 ? "" : s.ToLowerInvariant() switch
+    {
+        "error" or "down" => "fill-urgent",
+        "degraded"        => "fill-degraded",
+        _                 => "",
+    };
 
     private static string FormatUptime(TimeSpan t)
         => $"{(int)t.TotalHours:D2}:{t.Minutes:D2}:{t.Seconds:D2}";

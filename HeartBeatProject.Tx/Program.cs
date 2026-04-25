@@ -39,9 +39,12 @@ LogManager.Configuration!.AddTarget(dashboardTarget);
 LogManager.Configuration.AddRule(NLog.LogLevel.Info, NLog.LogLevel.Fatal, dashboardTarget, "*");
 LogManager.ReconfigExistingLoggers();
 
-var builder = WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(new WebApplicationOptions
+{
+    Args            = args,
+    ContentRootPath = AppContext.BaseDirectory
+});
 
-builder.Host.UseContentRoot(AppContext.BaseDirectory);
 builder.Logging.ClearProviders();
 builder.Host.UseNLog();
 
@@ -50,6 +53,7 @@ builder.Services.Configure<AlertOptions>(builder.Configuration.GetSection(AlertO
 
 builder.Services.AddSingleton<ILogStore>(logStore);
 builder.Services.AddSingleton<RuntimeSettingsStore>();
+builder.Services.AddSingleton<TxOperationalState>();
 builder.Services.AddSingleton<IHeartbeatStatusService, TxHeartbeatStatusService>();
 builder.Services.AddSingleton<IHeartbeatFileGenerator, HeartbeatFileGenerator>();
 builder.Services.AddSingleton<SmtpAlertService>();

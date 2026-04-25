@@ -21,7 +21,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\HeartBeatProject.shared\HeartBeatProject.shared.csproj" />
+    <ProjectReference Include="..\HeartBeatProject.Shared\HeartBeatProject.Shared.csproj" />
   </ItemGroup>
 
 </Project>

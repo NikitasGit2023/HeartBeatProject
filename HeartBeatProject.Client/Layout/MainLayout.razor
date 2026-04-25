@@ -1,4 +1,6 @@
 @inherits LayoutComponentBase
+@inject HttpClient Http
+@inject AppState AppState
 
 <div class="page">
     <div class="sidebar">
@@ -21,3 +23,16 @@
     <a href="" class="reload">Reload</a>
     <a class="dismiss">🗙</a>
 </div>
+
+@code {
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var status = await Http.GetFromJsonAsync<StatusDto>("api/status");
+            if (status is not null)
+                AppState.SetMode(status.Mode);
+        }
+        catch { }
+    }
+}

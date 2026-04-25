@@ -1,9 +1,16 @@
+@inject AppState AppState
+@implements IDisposable
+
 <div class="top-row ps-3 navbar navbar-dark">
     <div class="brand">
         <svg class="brand-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="2 12 5 12 7 4 9 20 11 11 13 15 15 12 22 12" />
         </svg>
         <span class="brand-name">HeartBeat</span>
+        @if (AppState.IsLoaded)
+        {
+            <span class="mode-pill @(AppState.IsTx ? "pill-tx" : "pill-rx")">@AppState.Mode</span>
+        }
     </div>
     <button title="Navigation menu" class="navbar-toggler" @onclick="ToggleNavMenu">
         <span class="navbar-toggler-icon"></span>
@@ -53,4 +60,16 @@
     private bool collapseNavMenu = true;
     private string? NavMenuCssClass => collapseNavMenu ? "collapse" : null;
     private void ToggleNavMenu() => collapseNavMenu = !collapseNavMenu;
+
+    protected override void OnInitialized()
+    {
+        AppState.OnChange += OnModeChanged;
+    }
+
+    private void OnModeChanged() => StateHasChanged();
+
+    public void Dispose()
+    {
+        AppState.OnChange -= OnModeChanged;
+    }
 }

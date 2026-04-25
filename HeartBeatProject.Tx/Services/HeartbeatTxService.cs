@@ -9,6 +9,7 @@ public sealed class HeartbeatTxService : BackgroundService
     private readonly IHeartbeatFileGenerator _fileGenerator;
     private readonly IAlertService _alertService;
     private readonly RuntimeSettingsStore _settingsStore;
+    private readonly TxOperationalState _state;
     private readonly TimeSpan _alertCooldown = TimeSpan.FromMinutes(5);
     private bool _lastWasSuccess = true;
     private DateTime _lastAlertTime = DateTime.MinValue;
@@ -17,12 +18,14 @@ public sealed class HeartbeatTxService : BackgroundService
         ILogger<HeartbeatTxService> logger,
         IHeartbeatFileGenerator fileGenerator,
         IAlertService alertService,
-        RuntimeSettingsStore settingsStore)
+        RuntimeSettingsStore settingsStore,
+        TxOperationalState state)
     {
         _logger        = logger;
         _fileGenerator = fileGenerator;
         _alertService  = alertService;
         _settingsStore = settingsStore;
+        _state         = state;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -50,23 +53,28 @@ public sealed class HeartbeatTxService : BackgroundService
 
     private async Task OnSuccessAsync(CancellationToken cancellationToken)
     {
+        _state.RecordSuccess();
+
         if (_lastWasSuccess) return;
 
-        _logger.LogInformation("TX: Status: DOWN \u2192 HEALTHY — heartbeat file generation recovered.");
+        _logger.LogInformation("TX: Status: DOWN → HEALTHY — heartbeat file generation recovered.");
         _lastWasSuccess = true;
         _lastAlertTime  = DateTime.MinValue;
 
         await _alertService.SendAlertAsync(
-            "Heartbeat TX \u2014 Recovery",
+            "Heartbeat TX — Recovery",
             $"Mode: TX\nTimestamp: {DateTime.UtcNow:O}\n\nHeartbeat file generation has recovered.",
             cancellationToken);
     }
 
     private async Task OnFailureAsync(Exception ex, CancellationToken cancellationToken)
     {
+        var isPathIssue = ex is UnauthorizedAccessException or PathTooLongException;
+        _state.RecordFailure(isPathIssue, ex.Message);
+
         if (_lastWasSuccess)
         {
-            _logger.LogWarning("TX: Status: HEALTHY \u2192 DOWN");
+            _logger.LogWarning("TX: Status: HEALTHY → DOWN");
             _lastWasSuccess = false;
         }
         else
@@ -89,7 +97,7 @@ public sealed class HeartbeatTxService : BackgroundService
         _logger.LogInformation("TX: Sending alert. Folder: {Folder}", folder);
 
         await _alertService.SendAlertAsync(
-            "Heartbeat TX \u2014 File Generation Failed",
+            "Heartbeat TX — File Generation Failed",
             $"Mode: TX\nFolder: {folder}\nTimestamp: {DateTime.UtcNow:O}\n\nError: {ex.Message}",
             cancellationToken);
     }

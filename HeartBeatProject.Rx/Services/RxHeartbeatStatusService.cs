@@ -5,56 +5,29 @@ namespace HeartBeatProject.Rx.Services;
 
 public sealed class RxHeartbeatStatusService : IHeartbeatStatusService
 {
-    private readonly ILogger<RxHeartbeatStatusService> _logger;
+    private readonly RxOperationalState _state;
     private readonly RuntimeSettingsStore _settingsStore;
     private readonly DateTime _startTime = DateTime.UtcNow;
 
-    public RxHeartbeatStatusService(RuntimeSettingsStore settingsStore, ILogger<RxHeartbeatStatusService> logger)
+    public RxHeartbeatStatusService(RxOperationalState state, RuntimeSettingsStore settingsStore)
     {
+        _state         = state;
         _settingsStore = settingsStore;
-        _logger        = logger;
     }
 
     public StatusDto GetStatus()
     {
-        var settings = _settingsStore.Get();
-        DateTime? lastHeartbeat = null;
-        string status;
-
-        try
-        {
-            var latestFile = Directory.Exists(settings.FolderPath)
-                ? Directory.EnumerateFiles(settings.FolderPath, "*.txt")
-                           .Select(f => new FileInfo(f))
-                           .OrderByDescending(f => f.LastWriteTimeUtc)
-                           .FirstOrDefault()
-                : null;
-
-            if (latestFile is null)
-            {
-                status = "DOWN";
-            }
-            else
-            {
-                lastHeartbeat = latestFile.LastWriteTimeUtc;
-                status = (DateTime.UtcNow - latestFile.LastWriteTimeUtc).TotalSeconds <= settings.ThresholdSeconds
-                    ? "HEALTHY"
-                    : "DOWN";
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to read heartbeat status from folder {Folder}.", settings.FolderPath);
-            status = "DOWN";
-        }
+        var settings                       = _settingsStore.Get();
+        var (status, details, lastHealthy) = _state.Get();
 
         return new StatusDto
         {
             Mode            = "RX",
             Status          = status,
-            LastHeartbeat   = lastHeartbeat,
+            Details         = details,
+            LastHeartbeat   = lastHealthy,
             Uptime          = DateTime.UtcNow - _startTime,
-            IntervalSeconds = settings.CheckIntervalSeconds
+            IntervalSeconds = settings.CheckIntervalSeconds,
         };
     }
 }
