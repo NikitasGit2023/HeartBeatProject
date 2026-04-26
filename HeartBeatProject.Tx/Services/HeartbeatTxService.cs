@@ -53,11 +53,17 @@ public sealed class HeartbeatTxService : BackgroundService
 
     private async Task OnSuccessAsync(CancellationToken cancellationToken)
     {
+        if (_lastWasSuccess)
+        {
+            _state.RecordSuccess();
+            return;
+        }
+
+        // Capture the previous status before overwriting it with RecordSuccess.
+        var (previousStatus, _, _) = _state.Get();
         _state.RecordSuccess();
 
-        if (_lastWasSuccess) return;
-
-        _logger.LogInformation("TX: Status: DOWN → HEALTHY — heartbeat file generation recovered.");
+        _logger.LogInformation("TX: Status: {Previous} → RUNNING — file generation recovered.", previousStatus);
         _lastWasSuccess = true;
         _lastAlertTime  = DateTime.MinValue;
 
@@ -69,17 +75,22 @@ public sealed class HeartbeatTxService : BackgroundService
 
     private async Task OnFailureAsync(Exception ex, CancellationToken cancellationToken)
     {
-        var isPathIssue = ex is UnauthorizedAccessException or PathTooLongException;
+        var isPathIssue = ex is UnauthorizedAccessException
+                              or PathTooLongException
+                              or DirectoryNotFoundException
+                              or IOException
+                              or NotSupportedException;
         _state.RecordFailure(isPathIssue, ex.Message);
+        var newStatus = isPathIssue ? "DEGRADED" : "ERROR";
 
         if (_lastWasSuccess)
         {
-            _logger.LogWarning("TX: Status: HEALTHY → DOWN");
+            _logger.LogWarning("TX: Status: RUNNING → {Status} — {Reason}", newStatus, ex.Message);
             _lastWasSuccess = false;
         }
         else
         {
-            _logger.LogWarning("TX: Still failing.");
+            _logger.LogWarning("TX: Still {Status} — {Reason}", newStatus, ex.Message);
         }
 
         var now     = DateTime.UtcNow;

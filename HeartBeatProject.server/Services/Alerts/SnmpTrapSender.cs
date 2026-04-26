@@ -25,9 +25,15 @@ public sealed class SnmpTrapSender : ISnmpTrapSender
     {
         var opts = _settingsStore.Get();
 
-        if (!opts.EnableSnmp || string.IsNullOrWhiteSpace(opts.SnmpHost) || opts.SnmpPort <= 0)
+        if (!opts.EnableSnmp)
         {
-            _logger.LogWarning("SNMP trap skipped: incomplete SNMP configuration.");
+            _logger.LogDebug("SNMP trap skipped — SNMP is disabled.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(opts.SnmpHost) || opts.SnmpPort <= 0)
+        {
+            _logger.LogWarning("SNMP trap skipped — SnmpHost or SnmpPort is not configured.");
             return;
         }
 
@@ -63,7 +69,7 @@ public sealed class SnmpTrapSender : ISnmpTrapSender
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to send SNMP trap to {Host}:{Port}.",
-                _settingsStore.Get().SnmpHost, _settingsStore.Get().SnmpPort);
+                opts.SnmpHost, opts.SnmpPort);
         }
     }
 }

@@ -27,6 +27,9 @@ public sealed class HeartbeatFileGenerator : IHeartbeatFileGenerator
         var settings   = _settingsStore.Get();
         var folderPath = settings.FolderPath;
 
+        if (string.IsNullOrWhiteSpace(folderPath))
+            throw new DirectoryNotFoundException("FolderPath is not configured.");
+
         Directory.CreateDirectory(folderPath);
 
         // OverwriteExisting=true  → single fixed file (RX always sees the freshest write time)

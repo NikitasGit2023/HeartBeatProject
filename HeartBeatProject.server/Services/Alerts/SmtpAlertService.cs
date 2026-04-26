@@ -47,16 +47,22 @@ public sealed class SmtpAlertService : IAlertService
             {
                 throw;
             }
+            catch (SmtpException ex) when (attempt == MaxAttempts)
+            {
+                _logger.LogError(ex,
+                    "Failed to send alert email after {Attempts} attempts (SMTP status {Status}) to {Server}:{Port}. Subject: {Subject}",
+                    MaxAttempts, ex.StatusCode, opts.SmtpServer, opts.Port, subject);
+                return;
+            }
+            catch (Exception ex) when (attempt == MaxAttempts)
+            {
+                _logger.LogError(ex,
+                    "Failed to send alert email after {Attempts} attempts to {Server}:{Port}. Subject: {Subject}",
+                    MaxAttempts, opts.SmtpServer, opts.Port, subject);
+                return;
+            }
             catch (Exception ex)
             {
-                if (attempt == MaxAttempts)
-                {
-                    _logger.LogError(ex,
-                        "Failed to send alert email after {Attempts} attempts. Subject: {Subject}",
-                        MaxAttempts, subject);
-                    return;
-                }
-
                 _logger.LogWarning(ex,
                     "Email send attempt {Attempt}/{Max} failed — retrying in {Delay}ms. Subject: {Subject}",
                     attempt, MaxAttempts, RetryDelayMs, subject);

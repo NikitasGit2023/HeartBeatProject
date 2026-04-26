@@ -63,14 +63,22 @@ public sealed class RuntimeSettingsStore
         if (string.IsNullOrWhiteSpace(dto.FolderPath))
             throw new ArgumentException("FolderPath must not be empty.", nameof(dto));
 
-        if (dto.IntervalSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(dto), "IntervalSeconds must be greater than 0.");
+        try   { Path.GetFullPath(dto.FolderPath); }
+        catch { throw new ArgumentException("FolderPath is not a valid path.", nameof(dto)); }
 
-        if (dto.CheckIntervalSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(dto), "CheckIntervalSeconds must be greater than 0.");
+        if (dto.IntervalSeconds is <= 0 or > 86400)
+            throw new ArgumentOutOfRangeException(nameof(dto), "IntervalSeconds must be between 1 and 86400.");
 
-        if (dto.ThresholdSeconds <= 0)
-            throw new ArgumentOutOfRangeException(nameof(dto), "ThresholdSeconds must be greater than 0.");
+        if (dto.CheckIntervalSeconds is <= 0 or > 86400)
+            throw new ArgumentOutOfRangeException(nameof(dto), "CheckIntervalSeconds must be between 1 and 86400.");
+
+        if (dto.ThresholdSeconds is <= 0 or > 86400)
+            throw new ArgumentOutOfRangeException(nameof(dto), "ThresholdSeconds must be between 1 and 86400.");
+
+        if (dto.ThresholdSeconds <= dto.CheckIntervalSeconds)
+            throw new ArgumentException(
+                $"ThresholdSeconds ({dto.ThresholdSeconds}) must be greater than CheckIntervalSeconds ({dto.CheckIntervalSeconds}).",
+                nameof(dto));
 
         if (dto.Port is < 1 or > 65535)
             throw new ArgumentOutOfRangeException(nameof(dto), "Port must be between 1 and 65535.");

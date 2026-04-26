@@ -69,11 +69,50 @@ public sealed class HeartbeatRxService : BackgroundService
             return;
         }
 
-        var latestFile = Directory
-            .EnumerateFiles(settings.FolderPath, "*.txt")
-            .Select(f => new FileInfo(f))
-            .OrderByDescending(f => f.LastWriteTimeUtc)
-            .FirstOrDefault();
+        // Materialise the file list inside a try-catch so that access errors on the
+        // enumeration are reported specifically rather than falling through to the
+        // outer "Unexpected error" handler.  (Directory.Exists can return false for
+        // access-denied, but EnumerateFiles will throw UnauthorizedAccessException.)
+        FileInfo? latestFile;
+        try
+        {
+            latestFile = Directory
+                .EnumerateFiles(settings.FolderPath, "*.txt")
+                .Select(f => new FileInfo(f))
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .FirstOrDefault();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _rxState.RecordDown($"Access denied to heartbeat folder: {settings.FolderPath}");
+            _logger.LogError(ex, "Access denied reading heartbeat folder: {Folder}", settings.FolderPath);
+            await TransitionToDownAsync(
+                "Heartbeat RX — Access Denied",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nTimestamp: {DateTime.UtcNow:O}\n\nAccess denied to the heartbeat folder.",
+                cancellationToken);
+            return;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            // Folder removed between Directory.Exists and EnumerateFiles.
+            _rxState.RecordDown("Heartbeat folder not found.");
+            _logger.LogWarning("Heartbeat folder disappeared mid-check: {Folder}", settings.FolderPath);
+            await TransitionToDownAsync(
+                "Heartbeat RX — Folder Missing",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nTimestamp: {DateTime.UtcNow:O}\n\nThe heartbeat folder does not exist.",
+                cancellationToken);
+            return;
+        }
+        catch (IOException ex)
+        {
+            _rxState.RecordDown($"I/O error reading heartbeat folder: {ex.Message}");
+            _logger.LogError(ex, "I/O error reading heartbeat folder: {Folder}", settings.FolderPath);
+            await TransitionToDownAsync(
+                "Heartbeat RX — Folder I/O Error",
+                $"Mode: RX\nFolder: {settings.FolderPath}\nTimestamp: {DateTime.UtcNow:O}\n\nI/O error: {ex.Message}",
+                cancellationToken);
+            return;
+        }
 
         if (latestFile is null)
         {
@@ -110,14 +149,16 @@ public sealed class HeartbeatRxService : BackgroundService
 
     private async Task TransitionToDownAsync(string subject, string message, CancellationToken cancellationToken)
     {
+        // RecordDown is always called before this method, so Details holds the current reason.
+        var reason = _rxState.Get().Details;
         if (_isHealthy)
         {
-            _logger.LogWarning("RX: Status: HEALTHY → DOWN");
+            _logger.LogWarning("RX: Status: HEALTHY → DOWN — {Reason}", reason);
             _isHealthy = false;
         }
         else
         {
-            _logger.LogWarning("RX: Still DOWN.");
+            _logger.LogWarning("RX: Still DOWN — {Reason}", reason);
         }
 
         var now     = DateTime.UtcNow;
