@@ -135,10 +135,17 @@ var
   PageMode      : TInputOptionWizardPage;
   PageTxConfig  : TInputQueryWizardPage;
   PageRxConfig  : TInputQueryWizardPage;
-  PageSmtpConn  : TInputQueryWizardPage;  { Server + Port }
-  PageSmtp      : TInputQueryWizardPage;  { From + To + Username + Password }
+  PageSmtp      : TWizardPage;     { custom — gives full layout control }
   PageSummary   : TWizardPage;
   SummaryMemo   : TNewMemo;
+
+  { SMTP field controls (owned by PageSmtp.Surface) }
+  EdtServer : TNewEdit;
+  EdtPort   : TNewEdit;
+  EdtFrom   : TNewEdit;
+  EdtTo     : TNewEdit;
+  EdtUser   : TNewEdit;
+  EdtPass   : TNewEdit;
 
 { =========================================================================== }
 { Mode helpers — used by [Files]/[Dirs]/[Icons] Check: directives             }
@@ -295,6 +302,59 @@ begin
 end;
 
 { =========================================================================== }
+{ SMTP custom page builder                                                     }
+{ Creates label+edit pairs with ScaleY-based spacing so all 6 rows fit        }
+{ inside the wizard surface at any WizardSizePercent / DPI setting.            }
+{ =========================================================================== }
+
+procedure AddSmtpRow(Surface: TPanel; var Y: Integer;
+                     Caption: string; Masked: Boolean;
+                     out Edt: TNewEdit);
+var
+  Lbl  : TNewStaticText;
+  LblH : Integer;
+  EdtH : Integer;
+begin
+  LblH := ScaleY(13);
+  EdtH := ScaleY(22);
+
+  Lbl            := TNewStaticText.Create(Surface);
+  Lbl.Parent     := Surface;
+  Lbl.Left       := 0;
+  Lbl.Top        := Y;
+  Lbl.Width      := Surface.Width;
+  Lbl.Height     := LblH;
+  Lbl.Caption    := Caption;
+  Lbl.AutoSize   := False;
+  Y              := Y + LblH + ScaleY(3);
+
+  Edt            := TNewEdit.Create(Surface);
+  Edt.Parent     := Surface;
+  Edt.Left       := 0;
+  Edt.Top        := Y;
+  Edt.Width      := Surface.Width;
+  Edt.Height     := EdtH;
+  if Masked then Edt.PasswordChar := '*';
+  Y              := Y + EdtH + ScaleY(9);
+end;
+
+procedure CreateSmtpPage(AfterID: Integer);
+var Y : Integer;
+begin
+  PageSmtp := CreateCustomPage(AfterID,
+    'Email / SMTP Configuration',
+    'Alert email settings. Leave SMTP Server blank to disable email alerts entirely.');
+
+  Y := 0;
+  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Server:',                                    False, EdtServer);
+  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Port (default 587):',                        False, EdtPort);
+  AddSmtpRow(PageSmtp.Surface, Y, 'Sender Email Address (From):',                    False, EdtFrom);
+  AddSmtpRow(PageSmtp.Surface, Y, 'Recipients — comma or semicolon separated:',      False, EdtTo);
+  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Username:',                                  False, EdtUser);
+  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Password:',                                  True,  EdtPass);
+end;
+
+{ =========================================================================== }
 { Wizard page creation and prefill                                             }
 { =========================================================================== }
 
@@ -336,31 +396,16 @@ begin
   if GRxFolder <> '' then PageRxConfig.Values[0] := GRxFolder
   else PageRxConfig.Values[0] := 'C:\Heartbeat\Shared\HeartbeatFiles';
 
-  { ---- Page 4: SMTP Connection (Server + Port only) ---- }
-  PageSmtpConn := CreateInputQueryPage(PageRxConfig.ID,
-    'Email / SMTP — Connection',
-    'Mail server settings.',
-    'Leave SMTP Server blank to disable email alerts entirely:');
-  PageSmtpConn.Add('SMTP Server:', False);
-  PageSmtpConn.Add('SMTP Port:', False);
-  PageSmtpConn.Values[0] := GSmtpServer;
-  PageSmtpConn.Values[1] := GSmtpPort;
+  { ---- Page 4: SMTP — custom layout (all 6 fields guaranteed visible) ---- }
+  CreateSmtpPage(PageRxConfig.ID);
+  EdtServer.Text := GSmtpServer;
+  EdtPort.Text   := GSmtpPort;
+  EdtFrom.Text   := GSmtpFrom;
+  EdtTo.Text     := GSmtpTo;
+  EdtUser.Text   := GSmtpUser;
+  EdtPass.Text   := GSmtpPass;
 
-  { ---- Page 5: SMTP Addresses & Credentials ---- }
-  PageSmtp := CreateInputQueryPage(PageSmtpConn.ID,
-    'Email / SMTP — Addresses & Credentials',
-    'Sender, recipient, and login details.',
-    '');
-  PageSmtp.Add('Sender Email Address (From):', False);
-  PageSmtp.Add('Recipient Address(es) — comma or semicolon separated:', False);
-  PageSmtp.Add('SMTP Username:', False);
-  PageSmtp.Add('SMTP Password:', True);   { True = mask with asterisks }
-  PageSmtp.Values[0] := GSmtpFrom;
-  PageSmtp.Values[1] := GSmtpTo;
-  PageSmtp.Values[2] := GSmtpUser;
-  PageSmtp.Values[3] := GSmtpPass;
-
-  { ---- Page 6: Summary (confirmation before copy) ---- }
+  { ---- Page 5: Summary (confirmation before copy) ---- }
   PageSummary := CreateCustomPage(PageSmtp.ID,
     'Installation Summary',
     'Review your configuration before installing.');
@@ -455,23 +500,19 @@ begin
     end;
   end
 
-  else if CurPageID = PageSmtpConn.ID then
+  else if CurPageID = PageSmtp.ID then
   begin
-    GSmtpServer := Trim(PageSmtpConn.Values[0]);
-    GSmtpPort   := Trim(PageSmtpConn.Values[1]);
+    GSmtpServer := Trim(EdtServer.Text);
+    GSmtpPort   := Trim(EdtPort.Text);
+    GSmtpFrom   := Trim(EdtFrom.Text);
+    GSmtpTo     := Trim(EdtTo.Text);
+    GSmtpUser   := Trim(EdtUser.Text);
+    GSmtpPass   :=      EdtPass.Text;   { do not trim passwords }
     if GSmtpPort = '' then GSmtpPort := '587';
     { Auto-detect SSL from port — no separate SSL page needed }
     if (GSmtpPort = '587') or (GSmtpPort = '465') then GSmtpSsl := True
     else if GSmtpPort = '25' then GSmtpSsl := False
     else GSmtpSsl := True;
-  end
-
-  else if CurPageID = PageSmtp.ID then
-  begin
-    GSmtpFrom := Trim(PageSmtp.Values[0]);
-    GSmtpTo   := Trim(PageSmtp.Values[1]);
-    GSmtpUser := Trim(PageSmtp.Values[2]);
-    GSmtpPass :=      PageSmtp.Values[3];   { do not trim passwords }
     if (GSmtpServer <> '') and (GSmtpFrom = '') then
     begin
       MsgBox('Please enter the Sender Email Address (From).', mbError, MB_OK);
@@ -587,10 +628,8 @@ begin
     else SvcName := '{#RxSvcName}';
     ExecSc('stop '   + SvcName);
     Sleep(2000);
-    ExecSc('delete ' + SvcName);
-
-    { Capture install paths now — {app} is still valid; our registry key may be
-      removed later when the uninstall log processes [Registry] entries.        }
+    ExecSc('delete ' + SvcName);  
+        
     GUninstAppDir  := ExpandConstant('{app}');
     if IsTxMode then GUninstModeDir := GUninstAppDir + '\TX'
     else             GUninstModeDir := GUninstAppDir + '\RX';
