@@ -125,6 +125,12 @@ var
   GSmtpSsl       : Boolean;
   GIsReinstall   : Boolean;
 
+  { Uninstall state }
+  GKeepSettings    : Boolean; { True = preserve appsettings.json + nlog.config }
+  GUninstAppDir    : string;  { Captured before uninstall log removes registry }
+  GUninstModeDir   : string;  { TX or RX subdir within GUninstAppDir }
+  GConfigBackupDir : string;  { Temp dir used to hold config files during removal }
+
   { Custom wizard page handles }
   PageMode      : TInputOptionWizardPage;
   PageTxConfig  : TInputQueryWizardPage;
@@ -536,16 +542,28 @@ begin
 end;
 
 { =========================================================================== }
-{ Uninstaller — stop and delete service before files are removed               }
+{ Uninstaller — prompt for settings retention, stop/delete service, preserve  }
+{ or discard appsettings.json + nlog.config based on user choice               }
 { =========================================================================== }
 
 function InitializeUninstall: Boolean;
-var S: string;
+var S: string; Answer: Integer;
 begin
   Result := True;
-  GMode := 'TX';   { safe default }
+
+  { Determine which mode is installed }
+  GMode := 'TX';
   if RegQueryStringValue(HKLM, RegKey, 'Mode', S) and (S <> '') then
     GMode := S;
+
+  { Ask whether to keep configuration files }
+  Answer := MsgBox(
+    'Do you want to keep your existing settings?' + #13#10 + #13#10 +
+    'Yes  —  removes binaries and the Windows service.' + #13#10 +
+    '         Preserves appsettings.json and nlog.config.' + #13#10 + #13#10 +
+    'No   —  removes everything, including all configuration files.',
+    mbConfirmation, MB_YESNO);
+  GKeepSettings := (Answer = IDYES);
 end;
 
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
@@ -553,10 +571,42 @@ var SvcName: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
+    { Stop and delete the Windows service for the installed mode }
     if IsTxMode then SvcName := '{#TxSvcName}'
     else SvcName := '{#RxSvcName}';
     ExecSc('stop '   + SvcName);
     Sleep(2000);
     ExecSc('delete ' + SvcName);
+
+    { Capture install paths now — {app} is still valid; our registry key may be
+      removed later when the uninstall log processes [Registry] entries.        }
+    GUninstAppDir  := ExpandConstant('{app}');
+    if IsTxMode then GUninstModeDir := GUninstAppDir + '\TX'
+    else             GUninstModeDir := GUninstAppDir + '\RX';
+
+    { Back up config files to a temp folder before the uninstall log deletes them }
+    if GKeepSettings then
+    begin
+      GConfigBackupDir := ExpandConstant('{tmp}') + '\HeartBeatCfgBackup';
+      CreateDir(GConfigBackupDir);
+      FileCopy(GUninstModeDir + '\appsettings.json',
+               GConfigBackupDir + '\appsettings.json', False);
+      FileCopy(GUninstModeDir + '\nlog.config',
+               GConfigBackupDir + '\nlog.config', False);
+    end;
+  end;
+
+  if CurUninstallStep = usPostUninstall then
+  begin
+    { Restore backed-up config files after the uninstall log has finished }
+    if GKeepSettings and (GConfigBackupDir <> '') then
+    begin
+      CreateDir(GUninstAppDir);
+      CreateDir(GUninstModeDir);
+      FileCopy(GConfigBackupDir + '\appsettings.json',
+               GUninstModeDir   + '\appsettings.json', False);
+      FileCopy(GConfigBackupDir + '\nlog.config',
+               GUninstModeDir   + '\nlog.config', False);
+    end;
   end;
 end;
