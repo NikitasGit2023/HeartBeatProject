@@ -62,14 +62,19 @@ Name: "startmenuicon"; Description: "Create a &Start Menu shortcut"; GroupDescri
 ; ---------------------------------------------------------------------------
 ; ---- TX payload (Check: IsTxMode guards file copy at install time) --------
 Source: "publish\Tx\HeartBeatProject.Tx.exe"; DestDir: "{app}\TX"; Flags: ignoreversion; Check: IsTxMode
-Source: "publish\Tx\appsettings.json"; DestDir: "{app}\TX"; Flags: ignoreversion;                                    Check: IsTxMode
-Source: "publish\Tx\nlog.config";      DestDir: "{app}\TX"; Flags: ignoreversion;                                    Check: IsTxMode
+; appsettings.json: seed the file only on a fresh install (file absent).
+; WriteAppSettings in ssPostInstall writes the actual wizard-configured content
+; and is itself guarded by GReplaceConfig, so on reinstall the file is only
+; touched when the user explicitly chose "Replace" at the ready prompt.
+Source: "publish\Tx\appsettings.json"; DestDir: "{app}\TX"; Flags: onlyifdoesntexist; Check: IsTxMode
+; nlog.config: always copy on fresh install; on reinstall honour GReplaceConfig.
+Source: "publish\Tx\nlog.config";      DestDir: "{app}\TX"; Flags: ignoreversion;     Check: ShouldCopyTxNlogConfig
 Source: "publish\Tx\wwwroot\*";        DestDir: "{app}\TX\wwwroot"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsTxMode
 
 ; ---- RX payload ------------------------------------------------------------
-Source: "publish\Rx\HeartBeatProject.Rx.exe";        DestDir: "{app}\RX"; Flags: ignoreversion;                                    Check: IsRxMode
-Source: "publish\Rx\appsettings.json"; DestDir: "{app}\RX"; Flags: ignoreversion;                                    Check: IsRxMode
-Source: "publish\Rx\nlog.config";      DestDir: "{app}\RX"; Flags: ignoreversion;                                    Check: IsRxMode
+Source: "publish\Rx\HeartBeatProject.Rx.exe";        DestDir: "{app}\RX"; Flags: ignoreversion;     Check: IsRxMode
+Source: "publish\Rx\appsettings.json"; DestDir: "{app}\RX"; Flags: onlyifdoesntexist; Check: IsRxMode
+Source: "publish\Rx\nlog.config";      DestDir: "{app}\RX"; Flags: ignoreversion;     Check: ShouldCopyRxNlogConfig
 Source: "publish\Rx\wwwroot\*";        DestDir: "{app}\RX\wwwroot"; Flags: ignoreversion recursesubdirs createallsubdirs; Check: IsRxMode
 
 ; ---------------------------------------------------------------------------
@@ -124,6 +129,7 @@ var
   GSmtpTo        : string;
   GSmtpSsl       : Boolean;
   GIsReinstall   : Boolean;
+  GReplaceConfig : Boolean; { True = write fresh appsettings.json; False = keep existing }
 
   { Uninstall state }
   GKeepSettings    : Boolean; { True = preserve appsettings.json + nlog.config }
@@ -159,6 +165,25 @@ end;
 function IsRxMode: Boolean;
 begin
   Result := CompareText(GMode, 'RX') = 0;
+end;
+
+{ Called by [Files] Check: for nlog.config entries.
+  Copies the file when: (a) it does not yet exist, OR (b) the user chose
+  Replace at the Ready prompt (GReplaceConfig = True).
+  Each function is mode-specific so the TX entry never fires for an RX install
+  and vice-versa, even if GMode changed after the [Files] phase began. }
+function ShouldCopyTxNlogConfig: Boolean;
+var DestFile: string;
+begin
+  DestFile := ExpandConstant('{app}') + '\TX\nlog.config';
+  Result   := IsTxMode and (GReplaceConfig or not FileExists(DestFile));
+end;
+
+function ShouldCopyRxNlogConfig: Boolean;
+var DestFile: string;
+begin
+  DestFile := ExpandConstant('{app}') + '\RX\nlog.config';
+  Result   := IsRxMode and (GReplaceConfig or not FileExists(DestFile));
 end;
 
 { =========================================================================== }
@@ -363,9 +388,10 @@ end;
 procedure InitializeWizard;
 begin
   { Defaults (overwritten by LoadRegistrySettings on reinstall) }
-  GMode      := 'TX';
-  GSmtpPort  := '587';
-  GSmtpSsl   := True;
+  GMode          := 'TX';
+  GSmtpPort      := '587';
+  GSmtpSsl       := True;
+  GReplaceConfig := True;   { overridden by the wpReady prompt when a config already exists }
 
   LoadRegistrySettings;
 
@@ -471,6 +497,9 @@ end;
 { =========================================================================== }
 
 function NextButtonClick(CurPageID: Integer): Boolean;
+var
+  ConfigPath : string;
+  Answer     : Integer;
 begin
   Result := True;
 
@@ -525,6 +554,29 @@ begin
       MsgBox('Please enter a Recipient Email Address (To).', mbError, MB_OK);
       Result := False; Exit;
     end;
+  end
+
+  else if CurPageID = wpReady then
+  begin
+    { Detect an existing config file in the chosen install directory.
+      The prompt fires only when a file is actually present, so a clean
+      first-time install never sees this dialog. }
+    if IsTxMode then ConfigPath := WizardDirValue + '\TX\appsettings.json'
+    else             ConfigPath := WizardDirValue + '\RX\appsettings.json';
+
+    if FileExists(ConfigPath) then
+    begin
+      Answer := MsgBox(
+        'An existing configuration file was found:' + #13#10 +
+        '  ' + ConfigPath + #13#10 + #13#10 +
+        'What would you like to do?' + #13#10 + #13#10 +
+        'Yes  — Keep existing settings (recommended)' + #13#10 +
+        'No   — Replace with the values entered in this wizard',
+        mbConfirmation, MB_YESNO);
+      GReplaceConfig := (Answer = IDNO);
+    end
+    else
+      GReplaceConfig := True;  { fresh install — always write }
   end;
 end;
 
@@ -574,8 +626,10 @@ begin
       SvcDisplay := '{#AppName} RX';
     end;
 
-    { Write user-configured appsettings.json, overwriting the published default }
-    WriteAppSettings(AppDir);
+    { Write wizard-configured appsettings.json only on a fresh install or when
+      the user explicitly chose Replace at the Ready prompt. }
+    if GReplaceConfig then
+      WriteAppSettings(AppDir);
 
     { Remove stale service entry (no-op on fresh install, needed on update) }
     ExecSc('delete ' + SvcName);
