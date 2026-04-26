@@ -307,9 +307,11 @@ end;
 { inside the wizard surface at any WizardSizePercent / DPI setting.            }
 { =========================================================================== }
 
-procedure AddSmtpRow(Surface: TPanel; var Y: Integer;
+{ Page: TWizardPage — avoids TPanel which is not a usable type identifier in  }
+{ Inno Setup Pascal Script. var Edt replaces out (out is not supported here). }
+procedure AddSmtpRow(Page: TWizardPage; var Y: Integer;
                      Caption: string; Masked: Boolean;
-                     out Edt: TNewEdit);
+                     var Edt: TNewEdit);
 var
   Lbl  : TNewStaticText;
   LblH : Integer;
@@ -318,21 +320,21 @@ begin
   LblH := ScaleY(13);
   EdtH := ScaleY(22);
 
-  Lbl            := TNewStaticText.Create(Surface);
-  Lbl.Parent     := Surface;
+  Lbl            := TNewStaticText.Create(Page.Surface);
+  Lbl.Parent     := Page.Surface;
   Lbl.Left       := 0;
   Lbl.Top        := Y;
-  Lbl.Width      := Surface.Width;
+  Lbl.Width      := Page.SurfaceWidth;
   Lbl.Height     := LblH;
   Lbl.Caption    := Caption;
   Lbl.AutoSize   := False;
   Y              := Y + LblH + ScaleY(3);
 
-  Edt            := TNewEdit.Create(Surface);
-  Edt.Parent     := Surface;
+  Edt            := TNewEdit.Create(Page.Surface);
+  Edt.Parent     := Page.Surface;
   Edt.Left       := 0;
   Edt.Top        := Y;
-  Edt.Width      := Surface.Width;
+  Edt.Width      := Page.SurfaceWidth;
   Edt.Height     := EdtH;
   if Masked then Edt.PasswordChar := '*';
   Y              := Y + EdtH + ScaleY(9);
@@ -346,12 +348,12 @@ begin
     'Alert email settings. Leave SMTP Server blank to disable email alerts entirely.');
 
   Y := 0;
-  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Server:',                                    False, EdtServer);
-  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Port (default 587):',                        False, EdtPort);
-  AddSmtpRow(PageSmtp.Surface, Y, 'Sender Email Address (From):',                    False, EdtFrom);
-  AddSmtpRow(PageSmtp.Surface, Y, 'Recipients — comma or semicolon separated:',      False, EdtTo);
-  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Username:',                                  False, EdtUser);
-  AddSmtpRow(PageSmtp.Surface, Y, 'SMTP Password:',                                  True,  EdtPass);
+  AddSmtpRow(PageSmtp, Y, 'SMTP Server:',                               False, EdtServer);
+  AddSmtpRow(PageSmtp, Y, 'SMTP Port (default 587):',                   False, EdtPort);
+  AddSmtpRow(PageSmtp, Y, 'Sender Email Address (From):',               False, EdtFrom);
+  AddSmtpRow(PageSmtp, Y, 'Recipients — comma or semicolon separated:', False, EdtTo);
+  AddSmtpRow(PageSmtp, Y, 'SMTP Username:',                             False, EdtUser);
+  AddSmtpRow(PageSmtp, Y, 'SMTP Password:',                             True,  EdtPass);
 end;
 
 { =========================================================================== }
