@@ -298,7 +298,7 @@ begin
       '    "FolderPath": "' + Folder + '",'                                                        + #13#10 +
       '    "FileNamePrefix": "heartbeat",'                                                         + #13#10 +
       '    "IntervalSeconds": 30,'                                                                 + #13#10 +
-      '    "OverwriteExisting": true,'                                                             + #13#10 +
+      '    "OverwriteExisting": false,'                                                            + #13#10 +
       '    "LogFolderPath": ""'                                                                    + #13#10 +
       '  },'                                                                                       + #13#10 +
       BuildAlertsJson                                                                              + #13#10 +
