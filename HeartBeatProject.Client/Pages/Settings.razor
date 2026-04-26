@@ -21,7 +21,7 @@ else
 {
     <EditForm Model="_settings" OnValidSubmit="SaveAsync">
 
-        <div class="settings-stack">
+        <div class="settings-grid">
 
             <!-- ── Heartbeat ─────────────────────────────────── -->
             <div class="settings-card">
@@ -44,17 +44,27 @@ else
                 @if (!AppState.IsLoaded || AppState.IsTx)
                 {
                     <div class="field-row">
-                        <div class="field">
-                            <label>TX Interval <span class="unit">(seconds)</span></label>
+                        <div class="field f-interval">
+                            <label>TX Interval <span class="unit">(s)</span></label>
                             <InputNumber @bind-Value="_settings.IntervalSeconds" />
                         </div>
                         <div class="field">
                             <label>Overwrite Existing</label>
-                            <label class="toggle">
-                                <InputCheckbox @bind-Value="_settings.OverwriteExisting" />
-                                <span class="toggle-track"></span>
-                                <span class="toggle-text">@(_settings.OverwriteExisting ? "Single file (overwrite)" : "Timestamped files")</span>
-                            </label>
+                            <div class="toggle-field">
+                                <button type="button"
+                                        class="onoff-btn onoff-inline onoff-small @(_settings.OverwriteExisting ? "onoff-on" : "onoff-off")"
+                                        @onclick="OnToggleOverwrite"
+                                        disabled="@IsTogglingOverwrite"
+                                        aria-pressed="@_settings.OverwriteExisting"
+                                        aria-label="Toggle overwrite existing">
+                                    <span class="onoff-track"><span class="onoff-knob"></span></span>
+                                    <span class="onoff-label">@(_settings.OverwriteExisting ? "Single file" : "Timestamped")</span>
+                                </button>
+                                @if (_toggleSavedId == "overwrite")
+                                {
+                                    <span class="toggle-saved">&#10003; Saved</span>
+                                }
+                            </div>
                         </div>
                     </div>
                 }
@@ -62,12 +72,12 @@ else
                 @if (!AppState.IsLoaded || AppState.IsRx)
                 {
                     <div class="field-row">
-                        <div class="field">
-                            <label>Check Interval <span class="unit">(seconds)</span></label>
+                        <div class="field f-interval">
+                            <label>Check Interval <span class="unit">(s)</span></label>
                             <InputNumber @bind-Value="_settings.CheckIntervalSeconds" />
                         </div>
-                        <div class="field">
-                            <label>Alert Threshold <span class="unit">(seconds)</span></label>
+                        <div class="field f-interval">
+                            <label>Threshold <span class="unit">(s)</span></label>
                             <InputNumber @bind-Value="_settings.ThresholdSeconds" />
                         </div>
                     </div>
@@ -75,61 +85,84 @@ else
             </div>
 
             <!-- ── Email Alerts ──────────────────────────────── -->
-            <div class="settings-card">
+            <div class="settings-card @(!_settings.EnableEmail ? "card-disabled" : "")">
                 <div class="card-header">
                     <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
                         <polyline points="22,6 12,13 2,6"/>
                     </svg>
                     <h3 class="card-title">Email Alerts</h3>
-                    <label class="toggle">
-                        <InputCheckbox @bind-Value="_settings.EnableEmail" />
-                        <span class="toggle-track"></span>
-                    </label>
+                    <div class="toggle-group">
+                        <button type="button"
+                                class="onoff-btn @(_settings.EnableEmail ? "onoff-on" : "onoff-off")"
+                                @onclick="OnToggleEmail"
+                                disabled="@IsTogglingEmail"
+                                aria-pressed="@_settings.EnableEmail"
+                                aria-label="Toggle email alerts">
+                            <span class="onoff-track"><span class="onoff-knob"></span></span>
+                            <span class="onoff-label">@(_settings.EnableEmail ? "ON" : "OFF")</span>
+                        </button>
+                        @if (_toggleSavedId == "email")
+                        {
+                            <span class="toggle-saved">&#10003; Updated</span>
+                        }
+                    </div>
                 </div>
 
-                <div class="field-row">
+                <fieldset disabled="@(!_settings.EnableEmail)" class="alert-fields">
+                    <div class="field-row">
+                        <div class="field">
+                            <label>SMTP Server</label>
+                            <InputText @bind-Value="_settings.SmtpServer" placeholder="smtp.example.com" />
+                        </div>
+                        <div class="field f-port">
+                            <label>Port</label>
+                            <InputNumber @bind-Value="_settings.Port" />
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label>Username</label>
+                            <InputText @bind-Value="_settings.Username" placeholder="smtp-user" />
+                        </div>
+                        <div class="field">
+                            <label>Password</label>
+                            <InputText @bind-Value="_settings.Password" type="password" placeholder="••••••••" />
+                        </div>
+                    </div>
+                    <div class="field-row">
+                        <div class="field">
+                            <label>From</label>
+                            <InputText @bind-Value="_settings.From" placeholder="system@example.com" />
+                        </div>
+                        <div class="field">
+                            <label>To <span class="unit">(semicolons)</span></label>
+                            <InputText @bind-Value="_settings.To" placeholder="admin@example.com" />
+                        </div>
+                    </div>
                     <div class="field">
-                        <label>SMTP Server</label>
-                        <InputText @bind-Value="_settings.SmtpServer" placeholder="smtp.example.com" />
+                        <label>SSL / STARTTLS</label>
+                        <div class="toggle-field">
+                            <button type="button"
+                                    class="onoff-btn onoff-inline onoff-small @(_settings.EnableSsl ? "onoff-on" : "onoff-off")"
+                                    @onclick="OnToggleSsl"
+                                    disabled="@IsTogglingSsl"
+                                    aria-pressed="@_settings.EnableSsl"
+                                    aria-label="Toggle SSL">
+                                <span class="onoff-track"><span class="onoff-knob"></span></span>
+                                <span class="onoff-label">@(_settings.EnableSsl ? "Enabled (port 587)" : "Disabled")</span>
+                            </button>
+                            @if (_toggleSavedId == "ssl")
+                            {
+                                <span class="toggle-saved">&#10003; Saved</span>
+                            }
+                        </div>
                     </div>
-                    <div class="field port-field">
-                        <label>Port</label>
-                        <InputNumber @bind-Value="_settings.Port" />
-                    </div>
-                </div>
-                <div class="field-row">
-                    <div class="field">
-                        <label>From</label>
-                        <InputText @bind-Value="_settings.From" placeholder="system@example.com" />
-                    </div>
-                    <div class="field">
-                        <label>To <span class="unit">(semicolon-separated)</span></label>
-                        <InputText @bind-Value="_settings.To" placeholder="admin@example.com" />
-                    </div>
-                </div>
-                <div class="field-row">
-                    <div class="field">
-                        <label>Username</label>
-                        <InputText @bind-Value="_settings.Username" placeholder="smtp-user" />
-                    </div>
-                    <div class="field">
-                        <label>Password</label>
-                        <InputText @bind-Value="_settings.Password" type="password" placeholder="••••••••" />
-                    </div>
-                </div>
-                <div class="field">
-                    <label>SSL / STARTTLS</label>
-                    <label class="toggle">
-                        <InputCheckbox @bind-Value="_settings.EnableSsl" />
-                        <span class="toggle-track"></span>
-                        <span class="toggle-text">@(_settings.EnableSsl ? "Enabled (port 587)" : "Disabled")</span>
-                    </label>
-                </div>
+                </fieldset>
             </div>
 
             <!-- ── SNMP Alerts ───────────────────────────────── -->
-            <div class="settings-card">
+            <div class="settings-card @(!_settings.EnableSnmp ? "card-disabled" : "")">
                 <div class="card-header">
                     <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <rect x="2" y="2" width="20" height="8" rx="2" ry="2"/>
@@ -138,151 +171,302 @@ else
                         <line x1="6" y1="18" x2="6.01" y2="18"/>
                     </svg>
                     <h3 class="card-title">SNMP Trap Alerts</h3>
-                    <label class="toggle">
-                        <InputCheckbox @bind-Value="_settings.EnableSnmp" />
-                        <span class="toggle-track"></span>
-                    </label>
+                    <div class="toggle-group">
+                        <button type="button"
+                                class="onoff-btn @(_settings.EnableSnmp ? "onoff-on" : "onoff-off")"
+                                @onclick="OnToggleSnmp"
+                                disabled="@IsTogglingSnmp"
+                                aria-pressed="@_settings.EnableSnmp"
+                                aria-label="Toggle SNMP trap alerts">
+                            <span class="onoff-track"><span class="onoff-knob"></span></span>
+                            <span class="onoff-label">@(_settings.EnableSnmp ? "ON" : "OFF")</span>
+                        </button>
+                        @if (_toggleSavedId == "snmp")
+                        {
+                            <span class="toggle-saved">&#10003; Updated</span>
+                        }
+                    </div>
                 </div>
 
-                <div class="field-row">
-                    <div class="field">
-                        <label>SNMP Host</label>
-                        <InputText @bind-Value="_settings.SnmpHost" placeholder="192.168.1.1" />
+                <fieldset disabled="@(!_settings.EnableSnmp)" class="alert-fields">
+                    <div class="field-row">
+                        <div class="field">
+                            <label>Host</label>
+                            <InputText @bind-Value="_settings.SnmpHost" placeholder="192.168.1.1" />
+                        </div>
+                        <div class="field f-port">
+                            <label>Port</label>
+                            <InputNumber @bind-Value="_settings.SnmpPort" />
+                        </div>
+                        <div class="field f-community">
+                            <label>Community</label>
+                            <InputText @bind-Value="_settings.Community" placeholder="public" />
+                        </div>
                     </div>
-                    <div class="field port-field">
-                        <label>Port</label>
-                        <InputNumber @bind-Value="_settings.SnmpPort" />
-                    </div>
-                    <div class="field community-field">
-                        <label>Community</label>
-                        <InputText @bind-Value="_settings.Community" placeholder="public" />
-                    </div>
-                </div>
+                </fieldset>
             </div>
 
             <!-- ── Syslog Alerts ─────────────────────────────── -->
-            <div class="settings-card">
+            <div class="settings-card @(!_settings.EnableSyslog ? "card-disabled" : "")">
                 <div class="card-header">
                     <svg class="card-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <polyline points="4 17 10 11 4 5"/>
                         <line x1="12" y1="19" x2="20" y2="19"/>
                     </svg>
                     <h3 class="card-title">Syslog Alerts</h3>
-                    <label class="toggle">
-                        <InputCheckbox @bind-Value="_settings.EnableSyslog" />
-                        <span class="toggle-track"></span>
-                    </label>
+                    <div class="toggle-group">
+                        <button type="button"
+                                class="onoff-btn @(_settings.EnableSyslog ? "onoff-on" : "onoff-off")"
+                                @onclick="OnToggleSyslog"
+                                disabled="@IsTogglingSyslog"
+                                aria-pressed="@_settings.EnableSyslog"
+                                aria-label="Toggle syslog alerts">
+                            <span class="onoff-track"><span class="onoff-knob"></span></span>
+                            <span class="onoff-label">@(_settings.EnableSyslog ? "ON" : "OFF")</span>
+                        </button>
+                        @if (_toggleSavedId == "syslog")
+                        {
+                            <span class="toggle-saved">&#10003; Updated</span>
+                        }
+                    </div>
                 </div>
 
-                <div class="field-row">
-                    <div class="field">
-                        <label>Syslog Host</label>
-                        <InputText @bind-Value="_settings.SyslogHost" placeholder="192.168.1.1" />
+                <fieldset disabled="@(!_settings.EnableSyslog)" class="alert-fields">
+                    <div class="field-row">
+                        <div class="field">
+                            <label>Host</label>
+                            <InputText @bind-Value="_settings.SyslogHost" placeholder="192.168.1.1" />
+                        </div>
+                        <div class="field f-port">
+                            <label>Port</label>
+                            <InputNumber @bind-Value="_settings.SyslogPort" />
+                        </div>
+                        <div class="field f-community">
+                            <label>Facility</label>
+                            <InputSelect @bind-Value="_settings.SyslogFacility">
+                                <option value="Kernel">Kernel</option>
+                                <option value="User">User</option>
+                                <option value="Daemons">Daemons</option>
+                                <option value="Local0">Local0</option>
+                                <option value="Local1">Local1</option>
+                                <option value="Local2">Local2</option>
+                                <option value="Local3">Local3</option>
+                                <option value="Local4">Local4</option>
+                                <option value="Local5">Local5</option>
+                                <option value="Local6">Local6</option>
+                                <option value="Local7">Local7</option>
+                            </InputSelect>
+                        </div>
                     </div>
-                    <div class="field port-field">
-                        <label>Port</label>
-                        <InputNumber @bind-Value="_settings.SyslogPort" />
-                    </div>
-                    <div class="field community-field">
-                        <label>Facility</label>
-                        <InputSelect @bind-Value="_settings.SyslogFacility">
-                            <option value="Kernel">Kernel</option>
-                            <option value="User">User</option>
-                            <option value="Daemons">Daemons</option>
-                            <option value="Local0">Local0</option>
-                            <option value="Local1">Local1</option>
-                            <option value="Local2">Local2</option>
-                            <option value="Local3">Local3</option>
-                            <option value="Local4">Local4</option>
-                            <option value="Local5">Local5</option>
-                            <option value="Local6">Local6</option>
-                            <option value="Local7">Local7</option>
-                        </InputSelect>
-                    </div>
-                </div>
+                </fieldset>
             </div>
 
         </div>
 
-        @if (_errorMessage is not null)
-        {
-            <div class="error-banner">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <circle cx="12" cy="12" r="10"/>
-                    <line x1="12" y1="8" x2="12" y2="12"/>
-                    <line x1="12" y1="16" x2="12.01" y2="16"/>
-                </svg>
-                @_errorMessage
-            </div>
-        }
-
-        <div class="form-actions">
-            <button type="submit" class="btn-save" disabled="@_saving">
-                @if (_saving) { <span class="btn-spinner"></span> }
-                Save Changes
-            </button>
-            @if (_saved)
+        <!-- ── Sticky save bar ───────────────────────────────── -->
+        <div class="save-bar">
+            @if (_errorMessage is not null)
             {
-                <span class="save-confirm">&#10003; Settings saved</span>
+                <div class="error-inline">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="10"/>
+                        <line x1="12" y1="8" x2="12" y2="12"/>
+                        <line x1="12" y1="16" x2="12.01" y2="16"/>
+                    </svg>
+                    @_errorMessage
+                </div>
             }
+            <div class="save-actions">
+                <button type="submit" class="btn-save" disabled="@_saving">
+                    @if (_saving) { <span class="btn-spinner"></span> }
+                    Save Changes
+                </button>
+                @if (_saved)
+                {
+                    <span class="save-confirm">&#10003; Settings saved</span>
+                }
+                <span class="save-hint">Applies to folder path, intervals, and alert connection details</span>
+            </div>
         </div>
 
     </EditForm>
 }
 
 <style>
-    .page-header   { margin-bottom: 1.75rem; }
-    .page-title    { font-size: 1.6rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
-    .page-subtitle { font-size: 0.875rem; color: #64748b; }
+    /* ── Page header ──────────────────────────────────── */
+    .page-header   { margin-bottom: 1.5rem; }
+    .page-title    { font-size: 1.5rem; font-weight: 700; color: #0f172a; margin: 0 0 2px; }
+    .page-subtitle { font-size: 0.85rem; color: #64748b; }
 
     .loading-card { display: flex; align-items: center; gap: 12px; padding: 2rem; background: white; border-radius: 12px; color: #64748b; box-shadow: 0 1px 3px rgba(0,0,0,.06); }
     .spinner      { width: 20px; height: 20px; border: 2px solid #e2e8f0; border-top-color: #0ea5e9; border-radius: 50%; animation: spin 0.7s linear infinite; }
 
-    .settings-stack { display: flex; flex-direction: column; gap: 1rem; margin-bottom: 1.25rem; }
+    /* ── Two-column responsive card grid ─────────────── */
+    .settings-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        align-items: start;
+        margin-bottom: 0.75rem;
+    }
 
+    @@media (max-width: 900px) {
+        .settings-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── Cards ────────────────────────────────────────── */
     .settings-card {
         background: white;
         border-radius: 12px;
-        padding: 1.5rem;
+        padding: 1.25rem 1.5rem;
         box-shadow: 0 1px 3px rgba(0,0,0,.06), 0 4px 12px rgba(0,0,0,.03);
         border: 1px solid #f1f5f9;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .settings-card.card-disabled {
+        border-color: #e9edf2;
+        box-shadow: 0 1px 3px rgba(0,0,0,.03);
     }
 
-    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1.25rem; }
-    .card-icon   { width: 20px; height: 20px; color: #0ea5e9; flex-shrink: 0; }
-    .card-title  { font-size: 0.95rem; font-weight: 700; color: #0f172a; margin: 0; flex: 1; }
+    /* ── Card header ──────────────────────────────────── */
+    .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 1rem; }
+    .card-icon   { width: 18px; height: 18px; color: #0ea5e9; flex-shrink: 0; }
+    .card-title  { font-size: 0.9rem; font-weight: 700; color: #0f172a; margin: 0; flex: 1; }
 
     .mode-hint {
-        font-size: 0.7rem; font-weight: 600; color: #94a3b8;
-        background: #f1f5f9; padding: 2px 8px; border-radius: 4px;
+        font-size: 0.68rem; font-weight: 600; color: #94a3b8;
+        background: #f1f5f9; padding: 2px 7px; border-radius: 4px;
         text-transform: uppercase; letter-spacing: 0.5px;
     }
 
-    .toggle { display: flex; align-items: center; cursor: pointer; margin: 0; }
-    .toggle ::deep input { display: none; }
-    .toggle-track {
-        width: 36px; height: 20px; background: #cbd5e1; border-radius: 99px;
-        transition: background 0.2s; position: relative; flex-shrink: 0;
+    /* ── Toggle group (header-level, right-aligned) ───── */
+    .toggle-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-left: auto;
     }
-    .toggle-track::after {
-        content: ''; position: absolute; top: 3px; left: 3px;
-        width: 14px; height: 14px; background: white; border-radius: 50%; transition: transform 0.2s;
-    }
-    .toggle ::deep input:checked ~ .toggle-track { background: #0ea5e9; }
-    .toggle ::deep input:checked ~ .toggle-track::after { transform: translateX(16px); }
-    .toggle-text { font-size: 0.8rem; color: #64748b; margin-left: 10px; }
+    .toggle-group .onoff-btn { margin-left: 0; }
 
-    .field { display: flex; flex-direction: column; gap: 5px; margin-bottom: 1rem; }
-    .field label { font-size: 0.8rem; font-weight: 600; color: #475569; }
-    .field .unit  { font-weight: 400; color: #94a3b8; }
+    /* ── ON/OFF toggle button ─────────────────────────── */
+    .onoff-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: none;
+        border: none;
+        cursor: pointer;
+        padding: 4px 6px;
+        border-radius: 8px;
+        transition: background 0.15s;
+        margin-left: auto;
+    }
+    .onoff-btn:hover:not(:disabled) { background: #f1f5f9; }
+    .onoff-btn:focus-visible { outline: 2px solid rgba(14,165,233,.55); outline-offset: 2px; }
+    .onoff-btn:active:not(:disabled) { background: #e8f0f8; }
+    .onoff-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+    .onoff-inline { margin-left: 0; }
+
+    .onoff-track {
+        position: relative;
+        width: 40px;
+        height: 22px;
+        border-radius: 99px;
+        background: #cbd5e1;
+        transition: background 0.22s;
+        flex-shrink: 0;
+    }
+    .onoff-on .onoff-track  { background: #22c55e; }
+    .onoff-off .onoff-track { background: #cbd5e1; }
+
+    .onoff-knob {
+        position: absolute;
+        top: 3px;
+        left: 3px;
+        width: 16px;
+        height: 16px;
+        background: white;
+        border-radius: 50%;
+        box-shadow: 0 1px 4px rgba(0,0,0,.22);
+        transition: transform 0.22s;
+    }
+    .onoff-on .onoff-knob  { transform: translateX(18px); }
+    .onoff-off .onoff-knob { transform: translateX(0); }
+
+    .onoff-label {
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.6px;
+        text-transform: uppercase;
+        min-width: 24px;
+        text-align: left;
+    }
+    .onoff-on .onoff-label  { color: #16a34a; }
+    .onoff-off .onoff-label { color: #94a3b8; }
+
+    /* Small variant — used inside fields */
+    .onoff-small .onoff-track { width: 34px; height: 19px; }
+    .onoff-small .onoff-knob  { top: 2px; left: 3px; width: 15px; height: 15px; }
+    .onoff-small.onoff-on .onoff-knob { transform: translateX(15px); }
+    .onoff-small .onoff-label {
+        font-size: 0.78rem; font-weight: 600;
+        text-transform: none; letter-spacing: 0; min-width: auto;
+    }
+
+    /* ── Inline toggle saved pill ─────────────────────── */
+    .toggle-saved {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: #16a34a;
+        background: #f0fdf4;
+        border: 1px solid #bbf7d0;
+        padding: 2px 8px;
+        border-radius: 99px;
+        white-space: nowrap;
+        animation: toggle-fade-in 0.18s ease;
+    }
+
+    @@keyframes toggle-fade-in {
+        from { opacity: 0; transform: translateY(-3px); }
+        to   { opacity: 1; transform: translateY(0); }
+    }
+
+    /* ── Alert fields fieldset ────────────────────────── */
+    fieldset.alert-fields {
+        border: none;
+        padding: 0;
+        margin: 0;
+        transition: opacity 0.22s;
+    }
+    fieldset.alert-fields:disabled {
+        opacity: 0.38;
+        pointer-events: none;
+        user-select: none;
+    }
+
+    /* ── Toggle-field row ─────────────────────────────── */
+    .toggle-field {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 36px;
+    }
+
+    /* ── Field + field-row ────────────────────────────── */
+    .field { display: flex; flex-direction: column; gap: 4px; margin-bottom: 0.85rem; }
+    .field:last-child { margin-bottom: 0; }
+    .field label { font-size: 0.775rem; font-weight: 600; color: #475569; }
+    .field .unit { font-weight: 400; color: #94a3b8; }
+
     .field ::deep input[type=text],
     .field ::deep input[type=number],
     .field ::deep input[type=password],
     .field ::deep select {
-        padding: 8px 12px;
+        padding: 7px 10px;
         border: 1.5px solid #e2e8f0;
         border-radius: 8px;
-        font-size: 0.875rem;
+        font-size: 0.855rem;
         color: #0f172a;
         transition: border-color 0.15s, box-shadow 0.15s;
         outline: none;
@@ -296,51 +480,103 @@ else
         background: white;
     }
 
-    .field-row { display: flex; gap: 1rem; flex-wrap: wrap; }
-    .field-row .field { flex: 1; min-width: 160px; }
-    .port-field      { flex: 0 0 110px !important; min-width: 0 !important; }
-    .community-field { flex: 0 0 160px !important; min-width: 0 !important; }
+    .field-row { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 0; }
+    .field-row > .field { flex: 1; min-width: 100px; }
 
-    .error-banner {
-        display: flex; align-items: flex-start; gap: 10px;
-        padding: 12px 16px;
-        background: #fef2f2; border: 1px solid #fecaca;
-        border-radius: 8px; color: #dc2626;
-        font-size: 0.875rem; margin-bottom: 1rem;
+    /* ── Sized field variants ─────────────────────────── */
+    .f-port      { flex: 0 0 92px  !important; min-width: 0 !important; }
+    .f-interval  { flex: 0 0 116px !important; min-width: 0 !important; }
+    .f-community { flex: 0 0 148px !important; min-width: 0 !important; }
+
+    /* ── Sticky save bar ──────────────────────────────── */
+    .save-bar {
+        position: sticky;
+        bottom: 0;
+        background: rgba(255,255,255,0.97);
+        backdrop-filter: blur(10px);
+        border-top: 1px solid #e2e8f0;
+        padding: 10px 0 12px;
+        z-index: 20;
+        box-shadow: 0 -4px 16px rgba(0,0,0,.06);
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
     }
-    .error-banner svg { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; }
 
-    .form-actions { display: flex; align-items: center; gap: 1rem; }
+    .save-actions {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+    }
 
+    .save-hint {
+        font-size: 0.75rem;
+        color: #94a3b8;
+        margin-left: auto;
+    }
+
+    /* ── Inline error (inside save bar) ──────────────── */
+    .error-inline {
+        display: flex;
+        align-items: flex-start;
+        gap: 8px;
+        padding: 9px 13px;
+        background: #fef2f2;
+        border: 1px solid #fecaca;
+        border-radius: 8px;
+        color: #dc2626;
+        font-size: 0.835rem;
+    }
+    .error-inline svg { width: 16px; height: 16px; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── Save button ──────────────────────────────────── */
     .btn-save {
         display: flex; align-items: center; gap: 8px;
-        padding: 10px 24px;
+        padding: 9px 22px;
         background: #0ea5e9; color: white;
         border: none; border-radius: 8px;
-        font-size: 0.875rem; font-weight: 600;
+        font-size: 0.855rem; font-weight: 600;
         cursor: pointer; transition: background 0.15s;
+        white-space: nowrap;
     }
     .btn-save:hover    { background: #0284c7; }
     .btn-save:active   { background: #0369a1; }
     .btn-save:disabled { background: #7dd3fc; cursor: not-allowed; }
 
-    .btn-spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
+    .btn-spinner { width: 13px; height: 13px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.7s linear infinite; }
 
-    .save-confirm { font-size: 0.875rem; font-weight: 600; color: #22c55e; }
+    .save-confirm { font-size: 0.855rem; font-weight: 600; color: #22c55e; white-space: nowrap; }
 
+    /* ── Mobile overrides ─────────────────────────────── */
     @@media (max-width: 640px) {
         .field-row { flex-direction: column; }
-        .port-field, .community-field { flex: 1 !important; }
+        .f-port, .f-interval, .f-community { flex: 1 !important; }
+        .save-hint { display: none; }
     }
 </style>
 
 @code {
     private SettingsDto? _settings;
-    private bool   _saved;
-    private bool   _saving;
+    private bool    _saved;
+    private bool    _saving;
     private string? _errorMessage;
+    private string? _toggleSavedId;
+    private readonly HashSet<string> _toggling = new();
 
     private sealed record ApiError(string Error);
+
+    // Per-toggle computed properties — avoids string literals inside HTML attributes
+    private bool IsTogglingEmail     => _toggling.Contains("email");
+    private bool IsTogglingSnmp      => _toggling.Contains("snmp");
+    private bool IsTogglingSyslog    => _toggling.Contains("syslog");
+    private bool IsTogglingSsl       => _toggling.Contains("ssl");
+    private bool IsTogglingOverwrite => _toggling.Contains("overwrite");
+
+    private Task OnToggleEmail()     => ToggleBoolAsync("email",     () => _settings!.EnableEmail,       v => _settings!.EnableEmail       = v);
+    private Task OnToggleSnmp()      => ToggleBoolAsync("snmp",      () => _settings!.EnableSnmp,        v => _settings!.EnableSnmp        = v);
+    private Task OnToggleSyslog()    => ToggleBoolAsync("syslog",    () => _settings!.EnableSyslog,      v => _settings!.EnableSyslog      = v);
+    private Task OnToggleSsl()       => ToggleBoolAsync("ssl",       () => _settings!.EnableSsl,         v => _settings!.EnableSsl         = v);
+    private Task OnToggleOverwrite() => ToggleBoolAsync("overwrite", () => _settings!.OverwriteExisting, v => _settings!.OverwriteExisting = v);
 
     protected override async Task OnInitializedAsync()
     {
@@ -353,11 +589,58 @@ else
         try { var s = await t2; if (s is not null) _settings = s; } catch { }
     }
 
+    private async Task ToggleBoolAsync(string id, Func<bool> getter, Action<bool> setter)
+    {
+        if (_toggling.Contains(id)) return;
+
+        _toggling.Add(id);
+        _toggleSavedId = null;
+        _errorMessage  = null;
+
+        var previous = getter();
+        setter(!previous);
+        StateHasChanged();
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/settings", _settings);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _toggleSavedId = id;
+                StateHasChanged();
+                await Task.Delay(2200);
+                if (_toggleSavedId == id) _toggleSavedId = null;
+            }
+            else
+            {
+                setter(previous);
+                try
+                {
+                    var err = await response.Content.ReadFromJsonAsync<ApiError>();
+                    _errorMessage = err?.Error ?? "Toggle failed. Please try again.";
+                }
+                catch { _errorMessage = "Toggle failed. Please try again."; }
+            }
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            setter(previous);
+            _errorMessage = "Network error — toggle reverted.";
+        }
+        finally
+        {
+            _toggling.Remove(id);
+            StateHasChanged();
+        }
+    }
+
     private async Task SaveAsync()
     {
-        _saving       = true;
-        _errorMessage = null;
-        _saved        = false;
+        _saving        = true;
+        _errorMessage  = null;
+        _saved         = false;
+        _toggleSavedId = null;
 
         var response = await Http.PostAsJsonAsync("api/settings", _settings);
         _saving = false;

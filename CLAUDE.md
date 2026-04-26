@@ -62,7 +62,10 @@ Five projects in one solution:
   - **TX fields**: FolderPath, IntervalSeconds, OverwriteExisting
   - **RX fields**: FolderPath, CheckIntervalSeconds, ThresholdSeconds
   - **Both**: full SMTP (server/port/from/to/username/password/ssl), SNMP (host/port/community), Syslog (host/port/facility)
-  - API validation errors (HTTP 400) are surfaced inline as a red error banner
+  - Layout: **2-column CSS grid** on desktop (≥900 px), single column on mobile. Row 1: Heartbeat + Email; Row 2: SNMP + Syslog. `align-items: start` so cards don't stretch to match a taller neighbour.
+  - **Sticky save bar** (`position: sticky; bottom: 0`) always visible at the bottom of the viewport. Contains the Save Changes button (for text/numeric fields) and the error message. Works because `<main>` and `<article>` have no `overflow` constraint — window scroll is the scroll container.
+  - **Auto-save toggles**: all boolean fields (EnableEmail, EnableSnmp, EnableSyslog, EnableSsl, OverwriteExisting) call `ToggleBoolAsync` on click — optimistic flip → `POST /api/settings` → revert + error on failure. Button is disabled during the in-flight call. Success shows a green pill ("✓ Updated") for 2.2 s inline next to the toggle.
+  - API validation errors (HTTP 400) are surfaced in the sticky save bar as an inline red banner
 - `Dashboard.razor` shows mode-aware status labels and `StatusDto.Details` reason text
 
 ### `HeartBeatProject.Server` (Server Library — shared infrastructure)
@@ -186,15 +189,17 @@ Runtime changes via `POST /api/settings` update `RuntimeSettingsStore` only — 
 
 ## Publish
 
-Each executable has a `Properties/PublishProfiles/Release-win-x64.pubxml` profile:
-- `win-x64`, self-contained, single-file, `EnableCompressionInSingleFile=true`
-- `DeleteExistingFiles=true` on every publish
-- TX output → `publish/TX/`, RX output → `publish/RX/` (relative to solution root, gitignored)
-- `appsettings.Development.json` is excluded from publish output (`CopyToPublishDirectory=Never`)
+All publish profiles produce `win-x64`, self-contained, single-file output with `EnableCompressionInSingleFile=true`. `appsettings.Development.json` is excluded (`CopyToPublishDirectory=Never`).
 
-Publish output structure:
+| Profile | Command | Output |
+|---------|---------|--------|
+| TX → installer | `dotnet publish HeartBeatProject.Tx/HeartBeatProject.Tx.csproj /p:PublishProfile=FolderProfile` | `installer/publish/Tx/` |
+| RX → installer | `dotnet publish HeartBeatProject.Rx/HeartBeatProject.Rx.csproj /p:PublishProfile=Release-win-x64` | `installer/publish/Rx/` |
+| Both at once | `.\publish-all.ps1` or `publish-all.bat` | both of the above |
+
+Publish output structure (same for TX and RX):
 ```
-publish/TX/  (or RX/)
+installer/publish/Tx/   (or Rx/)
 ├── HeartBeatProject.Tx.exe   ← ~80–120 MB self-contained single file
 ├── appsettings.json
 ├── nlog.config
@@ -203,7 +208,36 @@ publish/TX/  (or RX/)
 
 **Do not add `PublishTrimmed=true`** — NLog and SharpSnmpLib use reflection and are not trim-safe. The Blazor WASM `_framework/` files are already IL-linked by the SDK.
 
+## Installer
+
+`installer/installer.iss` is an Inno Setup 6.3+ script that builds a single unified Windows installer (`HeartBeatMonitor-Setup-1.0.0.exe`).
+
+**Build steps:**
+1. Publish TX and RX (see Publish table above) — both must exist under `installer/publish/` before compiling.
+2. Open `installer/installer.iss` in Inno Setup Compiler (or run `iscc installer\installer.iss` from the repo root).
+3. Output: `installer/output/HeartBeatMonitor-Setup-1.0.0.exe`.
+
+**Wizard flow:** Mode (TX/RX) → Folder path → SMTP settings → Summary → Directory → Install
+
+**What the installer does:**
+- Copies only the relevant payload (TX or RX) based on user's mode selection.
+- Writes a fully configured `appsettings.json` from wizard inputs, overwriting the published default. SNMP and Syslog are always written as `false`/empty — configure them post-install via the web UI (`POST /api/settings`).
+- Registers the executable as a Windows Service (`sc create … start= auto`) and starts it immediately.
+- Creates desktop and Start Menu shortcuts.
+- Persists all wizard inputs to `HKLM\Software\HeartBeat\HeartBeat Monitor` so reinstalls pre-fill the wizard.
+
+**SSL auto-detection (no separate SSL page):** port 587 or 465 → `EnableSsl: true`; port 25 → `false`; any other port → `true`.
+
+**Key Inno Setup conventions in this script:**
+- `Check: IsTxMode` / `Check: IsRxMode` guards on `[Files]`, `[Dirs]`, `[Icons]` entries — `GMode` must be set before file-copy phase (it is, since wizard completes first).
+- `EscapeBackslashes()` replaces `StringReplace(..., [rfReplaceAll])` which is not supported in all IS6 builds.
+- `TNewMemo` on a `CreateCustomPage` is used for the summary instead of `TOutputMsgWizardPage.RichEditViewer` (not available in all IS6 builds).
+- `WizardDirValue` (not `ExpandConstant('{app}')`) is used in the summary page since `{app}` is not finalised until after `wpSelectDir`.
+- Service stop/delete runs at `ssInstall` (before files overwrite) and `ssPostInstall` (re-register + start); uninstall stop/delete runs in `CurUninstallStepChanged(usUninstall)`.
+
 ## Deployment
+
+The installer handles all deployment steps automatically. For manual deployment:
 
 ```
 C:\Heartbeat\
@@ -212,7 +246,6 @@ C:\Heartbeat\
 └── Shared\HeartbeatFiles\   ← TX writes here, RX reads here
 ```
 
-Register as Windows Services:
 ```
 sc create HeartbeatTX binPath="C:\Heartbeat\TX\HeartBeatProject.Tx.exe" start=auto
 sc create HeartbeatRX binPath="C:\Heartbeat\RX\HeartBeatProject.Rx.exe" start=auto
@@ -227,6 +260,39 @@ Both TX and RX `Program.cs` files use a two-phase startup pattern:
 
 The `InMemoryNLogTarget` (dashboard log feed) is also registered in the pre-builder phase, immediately after `nlog.config` is loaded, not in XML.
 
+## Settings UX Patterns
+
+### Toggle auto-save (`ToggleBoolAsync`)
+
+All boolean settings auto-save immediately on click. The pattern in `Settings.razor`:
+
+```csharp
+private async Task ToggleBoolAsync(string id, Func<bool> getter, Action<bool> setter)
+```
+
+1. Guard against double-click: `_toggling.Contains(id)` — early return if already in-flight.
+2. Optimistic flip: `setter(!previous)` → `StateHasChanged()`.
+3. `POST /api/settings` with the full `_settings` DTO.
+4. **Success**: set `_toggleSavedId = id` → green pill renders for 2.2 s → clear.
+5. **Failure**: `setter(previous)` reverts the flip → `_errorMessage` shown in the sticky save bar.
+
+**Why named methods instead of inline lambdas:** Razor does not allow double-quoted string literals inside double-quoted HTML attributes (e.g. `@onclick="() => Foo("id")"`). All five toggle handlers are named methods (`OnToggleEmail`, `OnToggleSnmp`, etc.) and all five in-flight checks are computed properties (`IsTogglingEmail`, etc.).
+
+### Field sizing classes
+
+| Class | Width | Used for |
+|---|---|---|
+| `.f-port` | 92 px | All Port fields |
+| `.f-interval` | 116 px | TX Interval, Check Interval, Threshold |
+| `.f-community` | 148 px | Community string, Facility select |
+| default | `flex: 1` | Everything else (host, server, email addresses) |
+
+On mobile (≤640 px) all sized fields collapse to `flex: 1` (full-width stack).
+
+### Save Changes button scope
+
+The sticky Save Changes button applies **only** to text, numeric, and select fields. Boolean toggles never require it. The save bar hint text ("Applies to folder path, intervals, and alert connection details") communicates this distinction to the user.
+
 ## Key Conventions
 
 - Nullable reference types enabled across all projects
@@ -237,6 +303,6 @@ The `InMemoryNLogTarget` (dashboard log feed) is also registered in the pre-buil
 - New Blazor pages: add to `HeartBeatProject.Client/Pages/` with `@page "/route"`, link from `Layout/NavMenu.razor`
 - New API endpoints: add to `HeartBeatProject.Server/Controllers/`; business logic in a new `Services/` class in that library
 - New shared DTOs: add to `HeartBeatProject.Shared/Dtos/`
-- `appsettings.Development.json` in TX and RX must contain only the `Logging` section — any other keys will override `appsettings.json` in Development mode and break configuration
+- `appsettings.Development.json` overrides are intentional in this project. TX's dev config includes Gmail SMTP (`smtp.gmail.com:587`, SSL, `nikita.gelfman444@gmail.com`) and `FolderPath: C:\Users\97254\Desktop\HeartBeatFiles` for local testing. RX's dev config includes the same folder path and alert settings. Adding keys unintentionally will silently override production `appsettings.json` values in Development mode — only add keys you mean to override.
 - Physical folder names on disk may still be `HeartBeatProject.server` / `HeartBeatProject.shared` (lowercase) — Windows is case-insensitive so builds are unaffected; the csproj files inside are already renamed to `HeartBeatProject.Server.csproj` / `HeartBeatProject.Shared.csproj`
 - `HeartBeatProject.Client/HeartBeatProject.csproj` is a stale leftover and is **not** referenced by the solution — the active file is `HeartBeatProject.Client/HeartBeatProject.Client.csproj`
