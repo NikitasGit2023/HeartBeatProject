@@ -135,7 +135,8 @@ var
   PageMode      : TInputOptionWizardPage;
   PageTxConfig  : TInputQueryWizardPage;
   PageRxConfig  : TInputQueryWizardPage;
-  PageSmtp      : TInputQueryWizardPage;
+  PageSmtpConn  : TInputQueryWizardPage;  { Server + Port }
+  PageSmtp      : TInputQueryWizardPage;  { From + To + Username + Password }
   PageSummary   : TWizardPage;
   SummaryMemo   : TNewMemo;
 
@@ -335,25 +336,31 @@ begin
   if GRxFolder <> '' then PageRxConfig.Values[0] := GRxFolder
   else PageRxConfig.Values[0] := 'C:\Heartbeat\Shared\HeartbeatFiles';
 
-  { ---- Page 4: SMTP ---- }
-  PageSmtp := CreateInputQueryPage(PageRxConfig.ID,
-    'Email / SMTP Configuration',
-    'Alert email settings.',
+  { ---- Page 4: SMTP Connection (Server + Port only) ---- }
+  PageSmtpConn := CreateInputQueryPage(PageRxConfig.ID,
+    'Email / SMTP — Connection',
+    'Mail server settings.',
     'Leave SMTP Server blank to disable email alerts entirely:');
-  PageSmtp.Add('SMTP Server:', False);
-  PageSmtp.Add('SMTP Port:', False);
+  PageSmtpConn.Add('SMTP Server:', False);
+  PageSmtpConn.Add('SMTP Port:', False);
+  PageSmtpConn.Values[0] := GSmtpServer;
+  PageSmtpConn.Values[1] := GSmtpPort;
+
+  { ---- Page 5: SMTP Addresses & Credentials ---- }
+  PageSmtp := CreateInputQueryPage(PageSmtpConn.ID,
+    'Email / SMTP — Addresses & Credentials',
+    'Sender, recipient, and login details.',
+    '');
   PageSmtp.Add('Sender Email Address (From):', False);
   PageSmtp.Add('Recipient Address(es) — comma or semicolon separated:', False);
   PageSmtp.Add('SMTP Username:', False);
   PageSmtp.Add('SMTP Password:', True);   { True = mask with asterisks }
-  PageSmtp.Values[0] := GSmtpServer;
-  PageSmtp.Values[1] := GSmtpPort;
-  PageSmtp.Values[2] := GSmtpFrom;
-  PageSmtp.Values[3] := GSmtpTo;
-  PageSmtp.Values[4] := GSmtpUser;
-  PageSmtp.Values[5] := GSmtpPass;
+  PageSmtp.Values[0] := GSmtpFrom;
+  PageSmtp.Values[1] := GSmtpTo;
+  PageSmtp.Values[2] := GSmtpUser;
+  PageSmtp.Values[3] := GSmtpPass;
 
-  { ---- Page 5: Summary (confirmation before copy) ---- }
+  { ---- Page 6: Summary (confirmation before copy) ---- }
   PageSummary := CreateCustomPage(PageSmtp.ID,
     'Installation Summary',
     'Review your configuration before installing.');
@@ -448,19 +455,23 @@ begin
     end;
   end
 
-  else if CurPageID = PageSmtp.ID then
+  else if CurPageID = PageSmtpConn.ID then
   begin
-    GSmtpServer := Trim(PageSmtp.Values[0]);
-    GSmtpPort   := Trim(PageSmtp.Values[1]);
-    GSmtpFrom   := Trim(PageSmtp.Values[2]);
-    GSmtpTo     := Trim(PageSmtp.Values[3]);
-    GSmtpUser   := Trim(PageSmtp.Values[4]);
-    GSmtpPass   :=      PageSmtp.Values[5];   { do not trim passwords }
+    GSmtpServer := Trim(PageSmtpConn.Values[0]);
+    GSmtpPort   := Trim(PageSmtpConn.Values[1]);
     if GSmtpPort = '' then GSmtpPort := '587';
     { Auto-detect SSL from port — no separate SSL page needed }
     if (GSmtpPort = '587') or (GSmtpPort = '465') then GSmtpSsl := True
     else if GSmtpPort = '25' then GSmtpSsl := False
     else GSmtpSsl := True;
+  end
+
+  else if CurPageID = PageSmtp.ID then
+  begin
+    GSmtpFrom := Trim(PageSmtp.Values[0]);
+    GSmtpTo   := Trim(PageSmtp.Values[1]);
+    GSmtpUser := Trim(PageSmtp.Values[2]);
+    GSmtpPass :=      PageSmtp.Values[3];   { do not trim passwords }
     if (GSmtpServer <> '') and (GSmtpFrom = '') then
     begin
       MsgBox('Please enter the Sender Email Address (From).', mbError, MB_OK);
