@@ -21,6 +21,8 @@ public sealed class TxOperationalState
     {
         lock (_lock)
         {
+            // DEGRADED = path/permissions failure (fixable without restarting the service).
+            // ERROR    = unexpected write failure (disk full, serialisation bug, etc.).
             _status  = pathIssue ? "DEGRADED" : "ERROR";
             _details = pathIssue
                 ? $"Output path unavailable: {errorMessage}"

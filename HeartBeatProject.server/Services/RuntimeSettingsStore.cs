@@ -47,6 +47,8 @@ public sealed class RuntimeSettingsStore
         };
     }
 
+    // Copy on every Get/Update so callers cannot mutate shared state through
+    // a reference they hold after releasing the lock.
     public SettingsDto Get()
     {
         lock (_lock) return Copy(_current);
@@ -54,6 +56,8 @@ public sealed class RuntimeSettingsStore
 
     public void Update(SettingsDto dto)
     {
+        // Validate outside the lock — validation may be slow and holding the lock
+        // would block all concurrent reads for the duration.
         Validate(dto);
         lock (_lock) _current = Copy(dto);
     }

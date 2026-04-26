@@ -26,6 +26,8 @@ public sealed class InMemoryLogStore : ILogStore
     public IReadOnlyList<LogEntryDto> GetRecent(int count = 200)
     {
         lock (_lock)
+            // TakeLast preserves insertion order; Reverse flips to most-recent-first
+            // so the dashboard shows the newest entries at the top.
             return _queue.TakeLast(count).Reverse().ToList();
     }
 }

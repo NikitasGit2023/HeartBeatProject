@@ -65,6 +65,8 @@ public sealed class HeartbeatTxService : BackgroundService
 
         _logger.LogInformation("TX: Status: {Previous} → RUNNING — file generation recovered.", previousStatus);
         _lastWasSuccess = true;
+        // Reset to MinValue so the next failure after this recovery fires immediately
+        // rather than being suppressed by the previous failure's cooldown timestamp.
         _lastAlertTime  = DateTime.MinValue;
 
         await _alertService.SendAlertAsync(

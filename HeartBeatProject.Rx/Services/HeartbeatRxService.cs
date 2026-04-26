@@ -10,7 +10,10 @@ public sealed class HeartbeatRxService : BackgroundService
     private readonly RuntimeSettingsStore _settingsStore;
     private readonly RxOperationalState _rxState;
     private readonly TimeSpan _alertCooldown = TimeSpan.FromMinutes(5);
+    // volatile: _isHealthy is read by HTTP request threads (via RxHeartbeatStatusService)
+    // without a lock; volatile prevents the JIT from caching a stale value in a register.
     private volatile bool _isHealthy = true;
+    // MinValue so the very first DOWN alert fires immediately (no cooldown on first failure).
     private DateTime _lastAlertTime = DateTime.MinValue;
 
     public HeartbeatRxService(
@@ -182,6 +185,8 @@ public sealed class HeartbeatRxService : BackgroundService
 
         _logger.LogInformation("RX: Status: DOWN → HEALTHY");
         _isHealthy     = true;
+        // Reset to MinValue so the next DOWN after this recovery fires immediately
+        // rather than being suppressed by the previous DOWN's cooldown timestamp.
         _lastAlertTime = DateTime.MinValue;
 
         await _alertService.SendAlertAsync(

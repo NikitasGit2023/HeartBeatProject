@@ -8,6 +8,9 @@ public sealed class InMemoryNLogTarget : TargetWithLayout
 {
     private readonly ILogStore _store;
 
+    // This target is constructed with a live ILogStore instance and therefore cannot
+    // be declared in nlog.config XML — it must be registered in code after nlog.config
+    // is loaded (see Program.cs Phase 1).
     public InMemoryNLogTarget(ILogStore store)
     {
         _store = store;
